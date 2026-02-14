@@ -2,11 +2,13 @@ import React from 'react';
 import { Trash2, ArrowUpDown, ArrowUp, ArrowDown, LogOut, Eye } from 'lucide-react';
 import type { User } from '../types';
 import type { Branch } from '../../../modules/masters/branch/types';
+import type { Company } from '../../../store/slices/companySlice';
 import { useAuth } from '../../../context/AuthContext';
 
 interface UserTableProps {
     users: User[];
     branches: Branch[];
+    companies?: Company[];
     isLoading: boolean;
     sortConfig: { field: keyof User; direction: 'asc' | 'desc' } | null;
     onSort: (field: keyof User) => void;
@@ -19,6 +21,7 @@ interface UserTableProps {
 export const UserTable: React.FC<UserTableProps> = ({
     users,
     branches,
+    // companies, // Removed from destructuring as it is no longer used
     isLoading,
     sortConfig,
     onSort,
@@ -104,14 +107,22 @@ export const UserTable: React.FC<UserTableProps> = ({
                                 {branches.find(b => b.id === user.branchId)?.name || '-'}
                             </td>
                             <td className="p-4 text-sm">
-                                {hasPermission('assign_user_companies') && (
-                                    <button
-                                        onClick={() => onAssignCompany(user)}
-                                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-sm transition-colors"
-                                    >
-                                        View/Assign
-                                    </button>
-                                )}
+                                <div className="space-y-1">
+                                    {hasPermission('assign_user_companies') ? (
+                                        <button
+                                            onClick={() => onAssignCompany(user)}
+                                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-sm transition-colors"
+                                        >
+                                            View/Assign
+                                        </button>
+                                    ) : (
+                                        <span className="text-gray-400 text-xs italic">
+                                            {user.assignedCompanies && user.assignedCompanies.length > 0
+                                                ? `${user.assignedCompanies.length} Assigned`
+                                                : 'None assigned'}
+                                        </span>
+                                    )}
+                                </div>
                             </td>
                             <td className="p-4 text-right">
                                 <div className="flex items-center justify-end gap-2">

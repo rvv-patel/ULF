@@ -5,13 +5,24 @@ import { addUser, updateUser, fetchUsers } from '../../store/slices/userSlice';
 import { fetchRoles } from '../../store/slices/roleSlice';
 import { fetchBranches } from '../../store/slices/branchSlice';
 import type { User, UserStatus } from './types';
-import { User as UserIcon, Mail, Briefcase, Phone, MapPin } from 'lucide-react';
+import { User as UserIcon, Mail, Briefcase, Phone, MapPin, AlertCircle } from 'lucide-react';
+
+interface FormErrors {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    address?: string;
+    branchId?: string;
+    status?: string;
+}
 
 export default function UserForm() {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const { id } = useParams();
-    const { items: users, loading, error } = useAppSelector(state => state.user);
+    const { items: users, loading, error: sliceError } = useAppSelector(state => state.user);
     const { items: roles, loading: rolesLoading } = useAppSelector(state => state.role);
     const { items: branches, loading: branchesLoading } = useAppSelector(state => state.branch);
 
@@ -34,7 +45,6 @@ export default function UserForm() {
         lastName: '',
         email: '',
         role: '',
-
         status: 'active',
         phone: '',
         avatar: '',
@@ -42,6 +52,9 @@ export default function UserForm() {
         branchId: undefined,
         address: ''
     });
+
+    const [errors, setErrors] = useState<FormErrors>({});
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (id) {
@@ -64,6 +77,53 @@ export default function UserForm() {
         }
     }, [id, users]);
 
+    const validateField = (name: string, value: any): string | undefined => {
+        switch (name) {
+            case 'firstName':
+                if (!value?.trim()) return 'First Name is required';
+                if (!/^[a-zA-Z\s]+$/.test(value)) return 'First Name should only contain letters';
+                return undefined;
+            case 'lastName':
+                if (!value?.trim()) return 'Last Name is required';
+                if (!/^[a-zA-Z\s]+$/.test(value)) return 'Last Name should only contain letters';
+                return undefined;
+            case 'email':
+                if (!value?.trim()) return 'Email Address is required';
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Please enter a valid email address';
+                return undefined;
+            case 'phone':
+                if (!value?.trim()) return 'Phone Number is required';
+                // Indian Phone format: Optional +91, then 6-9 followed by 9 digits. Allows space/hyphen after code.
+                if (!/^(\+91[\-\s]?)?[6-9]\d{9}$/.test(value)) return 'Please enter a valid Indian phone number';
+                return undefined;
+            case 'role':
+                if (!value) return 'Role is required';
+                return undefined;
+            case 'address':
+                if (!value?.trim()) return 'Address is required';
+                return undefined;
+            case 'branchId':
+                if (!value) return 'Branch is required';
+                return undefined;
+            case 'status':
+                if (!value) return 'Status is required';
+                return undefined;
+            default:
+                return undefined;
+        }
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name } = e.target;
+        setTouched(prev => ({ ...prev, [name]: true }));
+        const error = validateField(name, formData[name as keyof typeof formData]);
+        setErrors(prev => ({ ...prev, [name]: error }));
+    };
+
+    const getFieldError = (fieldName: keyof FormErrors) => {
+        return touched[fieldName] && errors[fieldName];
+    };
+
     const handleRoleChange = (roleName: string) => {
         const selectedRole = roles.find(r => r.name === roleName);
         setFormData({
@@ -71,10 +131,50 @@ export default function UserForm() {
             role: roleName,
             permissions: selectedRole ? [...selectedRole.permissions] : []
         });
+        if (touched.role) {
+            setErrors(prev => ({ ...prev, role: undefined }));
+        }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+
+        let processedValue: any = value;
+        if (name === 'branchId') {
+            processedValue = value ? Number(value) : undefined;
+        }
+
+        setFormData(prev => ({ ...prev, [name]: processedValue }));
+
+        // Real-time validation if already touched
+        if (touched[name]) {
+            const error = validateField(name, processedValue);
+            setErrors(prev => ({ ...prev, [name]: error }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate all fields
+        const newErrors: FormErrors = {};
+        const fieldsToValidate = ['firstName', 'lastName', 'email', 'phone', 'role', 'address', 'branchId', 'status'];
+        let isValid = true;
+
+        fieldsToValidate.forEach(field => {
+            const error = validateField(field, formData[field as keyof typeof formData]);
+            if (error) {
+                newErrors[field as keyof FormErrors] = error;
+                isValid = false;
+            }
+        });
+
+        // Mark all as touched
+        const allTouched = fieldsToValidate.reduce((acc, curr) => ({ ...acc, [curr]: true }), {});
+        setTouched(allTouched);
+        setErrors(newErrors);
+
+        if (!isValid) return;
 
         try {
             if (id) {
@@ -89,19 +189,11 @@ export default function UserForm() {
             } else {
                 await dispatch(addUser({
                     ...formData,
-                    // id and dateJoined are handled by backend or default, but type expects id in slice?
-                    // wait, addUser thunk expects Omit<User, 'id'>, but backend assigns ID.
-                    // The slice type definition needs to be careful.
-                    // Actually, my addUser thunk type uses Omit<User, 'id'> correctly.
-                    // So I pass formData which is Omit<User, 'id'|'dateJoined'>.
-                    // dateJoined will be handled by backend if missing.
-                    // Need to cast or adjust.
                 } as any)).unwrap();
             }
             navigate('/users');
         } catch (err) {
             console.error('Failed to save user:', err);
-            // Error is handled by slice state, can display it
         }
     };
 
@@ -125,12 +217,12 @@ export default function UserForm() {
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    {error && (
+                    {sliceError && (
                         <div className="p-4 bg-red-50 text-red-700 border-b border-red-200">
-                            {error}
+                            {sliceError}
                         </div>
                     )}
-                    <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                    <form onSubmit={handleSubmit} className="p-8 space-y-6" noValidate>
                         {/* Basic Info */}
                         <div className="space-y-4">
                             <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -139,66 +231,104 @@ export default function UserForm() {
                             </h2>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">First Name</label>
+                                    <label className="text-sm font-medium text-gray-700">First Name <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
-                                        required
+                                        name="firstName"
                                         value={formData.firstName}
-                                        onChange={e => setFormData({ ...formData, firstName: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors placeholder:text-gray-300"
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors placeholder:text-gray-300 ${getFieldError('firstName')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                         placeholder="e.g. Rahul"
                                     />
+                                    {getFieldError('firstName') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.firstName}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Middle Name</label>
+                                    <label className="text-sm font-medium text-gray-700">Middle Name <span className="text-gray-400 font-normal">(Optional)</span></label>
                                     <input
                                         type="text"
+                                        name="middleName"
                                         value={formData.middleName}
-                                        onChange={e => setFormData({ ...formData, middleName: e.target.value })}
+                                        onChange={handleChange}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors placeholder:text-gray-300"
                                         placeholder="e.g. Kumar"
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Last Name</label>
+                                    <label className="text-sm font-medium text-gray-700">Last Name <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
-                                        required
+                                        name="lastName"
                                         value={formData.lastName}
-                                        onChange={e => setFormData({ ...formData, lastName: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors placeholder:text-gray-300"
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors placeholder:text-gray-300 ${getFieldError('lastName')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                         placeholder="e.g. Sharma"
                                     />
+                                    {getFieldError('lastName') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.lastName}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Email Address</label>
+                                    <label className="text-sm font-medium text-gray-700">Email Address <span className="text-red-500">*</span></label>
                                     <div className="relative">
-                                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                        <Mail className={`absolute left-3 top-2.5 h-4 w-4 ${getFieldError('email') ? 'text-red-400' : 'text-gray-400'}`} />
                                         <input
                                             type="email"
-                                            required
+                                            name="email"
                                             value={formData.email}
-                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                            className="w-full pl-9 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors placeholder:text-gray-300"
+                                            onChange={handleChange}
+                                            onBlur={handleBlur}
+                                            className={`w-full pl-9 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors placeholder:text-gray-300 ${getFieldError('email')
+                                                ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                                : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                                }`}
                                             placeholder="e.g. rahul.sharma@example.com"
                                         />
                                     </div>
+                                    {getFieldError('email') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.email}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                                    <label className="text-sm font-medium text-gray-700">Phone Number <span className="text-red-500">*</span></label>
                                     <div className="relative">
-                                        <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                        <Phone className={`absolute left-3 top-2.5 h-4 w-4 ${getFieldError('phone') ? 'text-red-400' : 'text-gray-400'}`} />
                                         <input
                                             type="tel"
+                                            name="phone"
                                             value={formData.phone}
-                                            onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                            className="w-full pl-9 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors placeholder:text-gray-300"
+                                            onChange={handleChange}
+                                            onBlur={handleBlur}
+                                            className={`w-full pl-9 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors placeholder:text-gray-300 ${getFieldError('phone')
+                                                ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                                : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                                }`}
                                             placeholder="e.g. +91 98765 43210"
                                         />
                                     </div>
+                                    {getFieldError('phone') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.phone}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -211,15 +341,24 @@ export default function UserForm() {
                             </h2>
                             <div className="space-y-4">
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Full Address</label>
+                                    <label className="text-sm font-medium text-gray-700">Full Address <span className="text-red-500">*</span></label>
                                     <textarea
-                                        required
+                                        name="address"
                                         rows={3}
                                         value={formData.address}
-                                        onChange={e => setFormData({ ...formData, address: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors resize-none placeholder:text-gray-300"
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors resize-none placeholder:text-gray-300 ${getFieldError('address')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                         placeholder="e.g. B-101, Shanti Nagar, MG Road, Bangalore, Karnataka 560001, India"
                                     />
+                                    {getFieldError('address') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.address}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -232,34 +371,53 @@ export default function UserForm() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Branch</label>
+                                    <label className="text-sm font-medium text-gray-700">Branch <span className="text-red-500">*</span></label>
                                     <select
+                                        name="branchId"
                                         value={formData.branchId || ''}
-                                        onChange={e => setFormData({ ...formData, branchId: e.target.value ? Number(e.target.value) : undefined })}
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
                                         disabled={branchesLoading}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed ${getFieldError('branchId')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                     >
                                         <option value="">{branchesLoading ? 'Loading branches...' : 'Select Branch'}</option>
                                         {branches.map(branch => (
                                             <option key={branch.id} value={branch.id}>{branch.name}</option>
                                         ))}
                                     </select>
+                                    {getFieldError('branchId') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.branchId}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Role / Job Title</label>
+                                    <label className="text-sm font-medium text-gray-700">Role / Job Title <span className="text-red-500">*</span></label>
                                     <select
-                                        required
+                                        name="role"
                                         value={formData.role}
                                         onChange={e => handleRoleChange(e.target.value)}
+                                        onBlur={handleBlur}
                                         disabled={rolesLoading}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed ${getFieldError('role')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                     >
                                         <option value="">{rolesLoading ? 'Loading roles...' : 'Select Role'}</option>
                                         {roles.map(role => (
                                             <option key={role.id} value={role.name}>{role.name}</option>
                                         ))}
                                     </select>
+                                    {getFieldError('role') && (
+                                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                                            <AlertCircle size={12} /> {errors.role}
+                                        </p>
+                                    )}
                                     {rolesLoading && (
                                         <p className="text-xs text-gray-500 flex items-center gap-1">
                                             <span className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-green-600"></span>
@@ -268,12 +426,18 @@ export default function UserForm() {
                                     )}
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-700">Status</label>
+                                    <label className="text-sm font-medium text-gray-700">Status <span className="text-red-500">*</span></label>
                                     <select
+                                        name="status"
                                         value={formData.status}
-                                        onChange={e => setFormData({ ...formData, status: e.target.value as UserStatus })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors"
+                                        onChange={handleChange}
+                                        onBlur={handleBlur}
+                                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${getFieldError('status')
+                                            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                                            : 'border-gray-300 focus:ring-green-500/20 focus:border-green-500'
+                                            }`}
                                     >
+                                        <option value="">Select Status</option>
                                         <option value="active">Active</option>
                                         <option value="inactive">Inactive</option>
                                         <option value="on_leave">On Leave</option>

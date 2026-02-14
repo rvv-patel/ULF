@@ -208,6 +208,7 @@ export default function UserList() {
                             users={filteredUsers}
                             isLoading={loading}
                             branches={branches}
+                            companies={companies}
                             sortConfig={sortConfig}
                             onSort={handleSort}
                             onDelete={handleDelete}
