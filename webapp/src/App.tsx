@@ -38,8 +38,14 @@ function App() {
 
           {/* Dashboard Route - Accessible to all authenticated users (or view_dashboard if strict) */}
           {/* Dashboard Route - Accessible to all authenticated users (or view_dashboard if strict) */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/files" element={<OneDriveFileManager />} />
+          <Route element={<PermissionGuard permission="view_dashboard" />}>
+            <Route path="/" element={<Dashboard />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="view_files" />}>
+            <Route path="/files" element={<OneDriveFileManager />} />
+          </Route>
+
           <Route path="/profile" element={<ProfilePage />} />
 
           {/* User Routes */}

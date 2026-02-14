@@ -23,7 +23,7 @@ export default function Layout() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <Header
-                userName={user?.username || 'User'}
+                userName={user?.firstName || user?.username || 'User'}
                 userEmail={user?.email || 'user@example.com'}
             />
 
@@ -41,16 +41,18 @@ export default function Layout() {
                         <LayoutList className="h-6 w-6" />
                     </button>
 
-                    <button
-                        onClick={() => navigate('/files')}
-                        className={`p-3 rounded-xl transition-all ${isFilesActive
-                            ? 'bg-blue-50 text-blue-600 shadow-sm'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-                            }`}
-                        title="OneDrive Files"
-                    >
-                        <Cloud className="h-6 w-6" />
-                    </button>
+                    {hasPermission('view_files') && (
+                        <button
+                            onClick={() => navigate('/files')}
+                            className={`p-3 rounded-xl transition-all ${isFilesActive
+                                ? 'bg-blue-50 text-blue-600 shadow-sm'
+                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                                }`}
+                            title="OneDrive Files"
+                        >
+                            <Cloud className="h-6 w-6" />
+                        </button>
+                    )}
 
                     {hasPermission('view_users') && (
                         <button
