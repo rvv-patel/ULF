@@ -55,7 +55,9 @@ const authenticateToken = (req, res, next) => {
             }
         }
 
-        req.user = decoded; // Contains userId, email, role
+        // Exclude password and ensure userId is present for compatibility
+        const { password, ...userWithoutPassword } = user;
+        req.user = { ...userWithoutPassword, userId: user.id }; // Contains full user data including assignedCompanies and userId
         next();
     });
 };

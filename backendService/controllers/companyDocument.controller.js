@@ -1,33 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+const CompanyDocumentModel = require('../models/companyDocument.model');
 
-const DB_PATH = path.join(__dirname, '../data/companyDocuments.json');
-
-// Helper to read DB
-const readDb = () => {
+exports.getAll = async (req, res) => {
     try {
-        const data = fs.readFileSync(DB_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return { companyDocuments: [] };
-    }
-};
-
-// Helper to write DB
-const writeDb = (data) => {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-};
-
-// Helper: safe string compare
-const includesIgnoreCase = (text, term) => {
-    return (text || '').toString().toLowerCase().includes((term || '').toLowerCase());
-};
-
-exports.getAll = (req, res) => {
-    try {
-        const db = readDb();
-        let items = db.companyDocuments || [];
-
         const {
             page = 1,
             limit = 10,
@@ -36,132 +10,99 @@ exports.getAll = (req, res) => {
             order = 'asc'
         } = req.query;
 
-        // Filtering
-        if (search) {
-            items = items.filter(item =>
-                includesIgnoreCase(item.title, search) ||
-                includesIgnoreCase(item.documentFormat, search)
-            );
-        }
-
-        // Sorting
-        if (sortBy) {
-            items.sort((a, b) => {
-                const valA = a[sortBy];
-                const valB = b[sortBy];
-
-                if (valA === valB) return 0;
-
-                const comparison = valA > valB ? 1 : -1;
-                return order === 'desc' ? -comparison : comparison;
-            });
-        }
-
-        // Pagination
-        const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
-        const total = items.length;
-        const totalPages = Math.ceil(total / limitNum);
-        const start = (pageNum - 1) * limitNum;
-        const end = start + limitNum;
+        const offset = (parseInt(page) - 1) * limitNum;
 
-        const paginatedItems = items.slice(start, end);
+        const { items, total } = await CompanyDocumentModel.getAll({
+            limit: limitNum,
+            offset,
+            search,
+            sortBy,
+            order
+        });
+
+        const totalPages = Math.ceil(total / limitNum);
 
         res.json({
-            items: paginatedItems,
+            items,
             total,
             totalPages,
-            currentPage: pageNum
+            currentPage: parseInt(page)
         });
 
     } catch (error) {
+        console.error('Error fetching company documents:', error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.getById = (req, res) => {
+exports.getById = async (req, res) => {
     try {
-        const db = readDb();
-        const item = (db.companyDocuments || []).find(x => x.id === parseInt(req.params.id));
+        const item = await CompanyDocumentModel.getById(parseInt(req.params.id));
         if (!item) return res.status(404).json({ message: 'Not found' });
         res.json(item);
     } catch (error) {
+        console.error('Error fetching company document:', error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.create = (req, res) => {
+exports.create = async (req, res) => {
     try {
-        const db = readDb();
-        if (!db.companyDocuments) db.companyDocuments = [];
-
         const newItem = {
-            id: Date.now(),
             title: req.body.title || '',
-            documentFormat: req.body.documentFormat || '.docx',
-            isUploaded: req.body.isUploaded || false,
-            isGenerate: req.body.isGenerate || false
+            documentFormat: req.body.documentFormat || '.docx'
         };
 
-        db.companyDocuments.push(newItem);
-        writeDb(db);
-        res.status(201).json(newItem);
+        const created = await CompanyDocumentModel.create(newItem);
+        res.status(201).json(created);
     } catch (error) {
+        console.error('Error creating company document:', error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.update = (req, res) => {
+exports.update = async (req, res) => {
     try {
-        const db = readDb();
-        if (!db.companyDocuments) db.companyDocuments = [];
+        const updated = await CompanyDocumentModel.update(parseInt(req.params.id), {
+            title: req.body.title,
+            documentFormat: req.body.documentFormat
+        });
 
-        const index = db.companyDocuments.findIndex(x => x.id === parseInt(req.params.id));
-        if (index === -1) return res.status(404).json({ message: 'Not found' });
+        if (!updated) return res.status(404).json({ message: 'Not found' });
 
-        db.companyDocuments[index] = {
-            ...db.companyDocuments[index],
-            ...req.body,
-            id: db.companyDocuments[index].id
-        };
-        writeDb(db);
-        res.json(db.companyDocuments[index]);
+        res.json(updated);
     } catch (error) {
+        console.error('Error updating company document:', error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.delete = (req, res) => {
+exports.delete = async (req, res) => {
     try {
-        const db = readDb();
-        if (!db.companyDocuments) db.companyDocuments = [];
+        const deleted = await CompanyDocumentModel.delete(parseInt(req.params.id));
 
-        const initialLength = db.companyDocuments.length;
-        db.companyDocuments = db.companyDocuments.filter(x => x.id !== parseInt(req.params.id));
-
-        if (db.companyDocuments.length === initialLength) {
+        if (!deleted) {
             return res.status(404).json({ message: 'Not found' });
         }
 
-        writeDb(db);
         res.json({ message: 'Deleted successfully' });
     } catch (error) {
+        console.error('Error deleting company document:', error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.bulkDelete = (req, res) => {
+exports.bulkDelete = async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids)) return res.status(400).json({ message: 'Invalid ids format' });
 
-        const db = readDb();
-        if (!db.companyDocuments) db.companyDocuments = [];
+        await CompanyDocumentModel.bulkDelete(ids);
 
-        db.companyDocuments = db.companyDocuments.filter(x => !ids.includes(x.id));
-        writeDb(db);
         res.json({ message: 'Bulk deleted successfully' });
     } catch (error) {
+        console.error('Error bulk deleting company documents:', error);
         res.status(500).json({ error: error.message });
     }
 };

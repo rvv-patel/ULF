@@ -1,45 +1,44 @@
-const fs = require('fs');
-const path = require('path');
+const BranchModel = require('../models/branchModel');
 
-const DATA_FILE = path.join(__dirname, '../data/branches.json');
-
-const readData = () => {
-    const data = fs.readFileSync(DATA_FILE);
-    return JSON.parse(data);
-};
-
-const writeData = (data) => {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
-
-exports.getAllBranches = (req, res) => {
+/**
+ * Get all branches
+ */
+exports.getAllBranches = async (req, res) => {
     try {
-        const data = readData();
-        res.json(data.branches || []);
+        const branches = await BranchModel.getAll();
+        res.json(branches);
     } catch (error) {
+        console.error('Error fetching branches:', error);
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.getBranchById = (req, res) => {
+/**
+ * Get branch by ID
+ */
+exports.getBranchById = async (req, res) => {
     try {
-        const data = readData();
-        const branch = data.branches.find(b => b.id === parseInt(req.params.id));
-        if (!branch) return res.status(404).json({ message: 'Branch not found' });
+        const branch = await BranchModel.getById(parseInt(req.params.id));
+
+        if (!branch) {
+            return res.status(404).json({ message: 'Branch not found' });
+        }
+
         res.json(branch);
     } catch (error) {
+        console.error('Error fetching branch:', error);
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.createBranch = (req, res) => {
+/**
+ * Create new branch
+ */
+exports.createBranch = async (req, res) => {
     try {
         console.log('Received Create Branch Request');
         console.log('Body:', req.body);
         console.log('File:', req.file);
-
-        const data = readData();
-        if (!data.branches) data.branches = [];
 
         let imageUrl = null;
         if (req.file) {
@@ -47,7 +46,7 @@ exports.createBranch = (req, res) => {
         }
 
         const newBranch = {
-            id: Date.now(),
+            id: Date.now(), // Generate ID
             name: req.body.name,
             contactPerson: req.body.contactPerson,
             contactNumber: req.body.contactNumber,
@@ -55,27 +54,32 @@ exports.createBranch = (req, res) => {
             image: imageUrl
         };
 
-        data.branches.push(newBranch);
-        writeData(data);
-        res.status(201).json(newBranch);
+        const created = await BranchModel.create(newBranch);
+        res.status(201).json(created);
     } catch (error) {
         console.error('Error creating branch:', error);
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.updateBranch = (req, res) => {
+/**
+ * Update branch
+ */
+exports.updateBranch = async (req, res) => {
     try {
         console.log('Received Update Branch Request:', req.params.id);
         console.log('Body:', req.body);
         console.log('File:', req.file);
 
-        const data = readData();
-        const index = data.branches.findIndex(b => b.id === parseInt(req.params.id));
+        const branchId = parseInt(req.params.id);
 
-        if (index === -1) return res.status(404).json({ message: 'Branch not found' });
+        // Get existing branch to preserve image if no new upload
+        const existing = await BranchModel.getById(branchId);
+        if (!existing) {
+            return res.status(404).json({ message: 'Branch not found' });
+        }
 
-        let imageUrl = data.branches[index].image;
+        let imageUrl = existing.image;
         if (req.file) {
             imageUrl = `http://localhost:3001/uploads/${req.file.filename}`;
         } else if (req.body.image === '') {
@@ -83,8 +87,7 @@ exports.updateBranch = (req, res) => {
             imageUrl = null;
         }
 
-        data.branches[index] = {
-            ...data.branches[index],
+        const updates = {
             name: req.body.name,
             contactPerson: req.body.contactPerson,
             contactNumber: req.body.contactNumber,
@@ -92,27 +95,28 @@ exports.updateBranch = (req, res) => {
             image: imageUrl
         };
 
-        writeData(data);
-        res.json(data.branches[index]);
+        const updated = await BranchModel.update(branchId, updates);
+        res.json(updated);
     } catch (error) {
         console.error('Error updating branch:', error);
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.deleteBranch = (req, res) => {
+/**
+ * Delete branch
+ */
+exports.deleteBranch = async (req, res) => {
     try {
-        const data = readData();
-        const initialLength = data.branches ? data.branches.length : 0;
-        data.branches = (data.branches || []).filter(b => b.id !== parseInt(req.params.id));
+        const deleted = await BranchModel.delete(parseInt(req.params.id));
 
-        if (data.branches.length === initialLength) {
+        if (!deleted) {
             return res.status(404).json({ message: 'Branch not found' });
         }
 
-        writeData(data);
-        res.json({ message: 'Branch deleted successfully' });
+        res.json({ message: 'Branch deleted successfully', branch: deleted });
     } catch (error) {
+        console.error('Error deleting branch:', error);
         res.status(500).json({ message: error.message });
     }
 };

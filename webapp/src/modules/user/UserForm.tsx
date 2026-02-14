@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { addUser, updateUser, fetchUsers } from '../../store/slices/userSlice';
 import { fetchRoles } from '../../store/slices/roleSlice';
+import { fetchBranches } from '../../store/slices/branchSlice';
 import type { User, UserStatus } from './types';
 import { User as UserIcon, Mail, Briefcase, Phone, MapPin } from 'lucide-react';
 
@@ -12,6 +13,7 @@ export default function UserForm() {
     const { id } = useParams();
     const { items: users, loading, error } = useAppSelector(state => state.user);
     const { items: roles, loading: rolesLoading } = useAppSelector(state => state.role);
+    const { items: branches, loading: branchesLoading } = useAppSelector(state => state.branch);
 
     // Fetch users if not loaded
     useEffect(() => {
@@ -20,9 +22,10 @@ export default function UserForm() {
         }
     }, [dispatch, users.length]);
 
-    // Always fetch roles to ensure they're available
+    // Always fetch roles and branches
     useEffect(() => {
         dispatch(fetchRoles());
+        dispatch(fetchBranches());
     }, [dispatch]);
 
     const [formData, setFormData] = useState<Omit<User, 'id' | 'dateJoined'>>({
@@ -36,6 +39,7 @@ export default function UserForm() {
         phone: '',
         avatar: '',
         permissions: [],
+        branchId: undefined,
         address: ''
     });
 
@@ -53,6 +57,7 @@ export default function UserForm() {
                     phone: user.phone,
                     avatar: user.avatar,
                     permissions: user.permissions || [],
+                    branchId: user.branchId,
                     address: user.address || ''
                 });
             }
@@ -224,7 +229,22 @@ export default function UserForm() {
                                 <Briefcase className="h-5 w-5 text-gray-400" />
                                 Job Details
                             </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-700">Branch</label>
+                                    <select
+                                        value={formData.branchId || ''}
+                                        onChange={e => setFormData({ ...formData, branchId: e.target.value ? Number(e.target.value) : undefined })}
+                                        disabled={branchesLoading}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">{branchesLoading ? 'Loading branches...' : 'Select Branch'}</option>
+                                        {branches.map(branch => (
+                                            <option key={branch.id} value={branch.id}>{branch.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-gray-700">Role / Job Title</label>

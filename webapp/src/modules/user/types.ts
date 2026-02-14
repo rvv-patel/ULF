@@ -13,8 +13,8 @@ export interface User {
     dateJoined: string;
     avatar?: string;
     permissions?: string[];
-    assignedBranches?: number[];
     assignedCompanies?: number[];
+    branchId?: number;
     address: string;
     lastForcedLogoutAt?: string; // Timestamp for force logout
 }

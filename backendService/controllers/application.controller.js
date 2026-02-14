@@ -53,6 +53,32 @@ exports.getAll = (req, res) => {
         } = req.query;
 
         // Filtering
+
+        // Role-based filtering: If not Admin, restrict to assigned companies
+        if (req.user && req.user.role !== 'Admin') {
+            const assignedCompanyIds = req.user.assignedCompanies || [];
+
+            // Read companies.json to map IDs to Names
+            const COMPANIES_PATH = path.join(__dirname, '../data/companies.json');
+            let allowedCompanyNames = [];
+
+            try {
+                if (fs.existsSync(COMPANIES_PATH)) {
+                    const companiesData = JSON.parse(fs.readFileSync(COMPANIES_PATH, 'utf8'));
+                    allowedCompanyNames = companiesData.companies
+                        .filter(c => assignedCompanyIds.includes(c.id))
+                        .map(c => c.name);
+                }
+            } catch (err) {
+                console.error('Error reading companies for access control:', err);
+                // Fallback: if error, allow none or handle gracefully. 
+                // Here we strict fail safe: allow none if we can't verify.
+            }
+
+            // Apply filter: application.company must be in allowed list
+            items = items.filter(item => allowedCompanyNames.includes(item.company));
+        }
+
         if (search) {
             items = items.filter(item =>
                 includesIgnoreCase(item.applicantName, search) ||

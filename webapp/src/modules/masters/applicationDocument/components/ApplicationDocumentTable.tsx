@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit, Trash2, FileText, Upload, Sparkles } from 'lucide-react';
+import { Edit, Trash2, FileText } from 'lucide-react';
 import type { ApplicationDocument } from '../types';
 import { useAuth } from '../../../../context/AuthContext';
 
@@ -51,9 +51,7 @@ export const ApplicationDocumentTable: React.FC<ApplicationDocumentTableProps> =
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                             Document Title
                         </th>
-                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-40">
-                            Type
-                        </th>
+
                         <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-40">
                             Format
                         </th>
@@ -84,25 +82,6 @@ export const ApplicationDocumentTable: React.FC<ApplicationDocumentTableProps> =
                                         </p>
                                     </div>
                                 </div>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                                {item.isUploaded && (
-                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm">
-                                        <Upload className="h-3 w-3" />
-                                        Upload
-                                    </span>
-                                )}
-                                {item.isGenerate && (
-                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm">
-                                        <Sparkles className="h-3 w-3" />
-                                        Generate
-                                    </span>
-                                )}
-                                {!item.isUploaded && !item.isGenerate && (
-                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                                        Not Set
-                                    </span>
-                                )}
                             </td>
                             <td className="px-6 py-4 text-center">
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-200/50 shadow-sm">

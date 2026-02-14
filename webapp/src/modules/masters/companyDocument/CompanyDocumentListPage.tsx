@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../../../store/hooks';
 import { CompanyDocumentTable } from './components/CompanyDocumentTable';
-import { fetchCompanyDocuments, deleteCompanyDocument } from '../../../store/slices/companyDocumentSlice';
+import CompanyDocumentModal from './components/CompanyDocumentModal';
+import { fetchCompanyDocuments, deleteCompanyDocument, addCompanyDocument, updateCompanyDocument } from '../../../store/slices/companyDocumentSlice';
 import type { CompanyDocument } from './types';
 import { Search, Plus, FileText, X } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
@@ -10,7 +10,6 @@ import ConfirmModal from '../../../components/ConfirmModal';
 
 export default function CompanyDocumentListPage() {
     const dispatch = useAppDispatch();
-    const navigate = useNavigate();
     const { items, totalItems, totalPages, isLoading } = useAppSelector((state) => state.companyDocument);
     const { hasPermission } = useAuth();
 
@@ -21,6 +20,12 @@ export default function CompanyDocumentListPage() {
     const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; docId: number | null; docTitle: string }>(
         { isOpen: false, docId: null, docTitle: '' }
     );
+
+    // Modal state
+    const [documentModal, setDocumentModal] = useState<{ isOpen: boolean; editData: CompanyDocument | null }>({
+        isOpen: false,
+        editData: null
+    });
 
     const itemsPerPage = 10;
 
@@ -60,7 +65,35 @@ export default function CompanyDocumentListPage() {
     };
 
     const handleEdit = (id: number) => {
-        navigate(`/masters/company-documents/${id}/edit`);
+        const doc = items.find(item => item.id === id);
+        if (doc) {
+            setDocumentModal({ isOpen: true, editData: doc });
+        }
+    };
+
+    const handleAddNew = () => {
+        setDocumentModal({ isOpen: true, editData: null });
+    };
+
+    const handleSaveDocument = async (data: Partial<CompanyDocument>) => {
+        try {
+            if (documentModal.editData) {
+                // Update existing
+                await dispatch(updateCompanyDocument({
+                    ...documentModal.editData,
+                    ...data
+                } as CompanyDocument)).unwrap();
+            } else {
+                // Create new
+                await dispatch(addCompanyDocument({
+                    title: data.title || '',
+                    documentFormat: '.docx'
+                })).unwrap();
+            }
+            setDocumentModal({ isOpen: false, editData: null });
+        } catch (error) {
+            console.error('Failed to save document:', error);
+        }
     };
 
     return (
@@ -80,7 +113,7 @@ export default function CompanyDocumentListPage() {
                             </div>
                             {hasPermission('add_company_documents') && (
                                 <button
-                                    onClick={() => navigate('/masters/company-documents/new')}
+                                    onClick={handleAddNew}
                                     className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                                 >
                                     <Plus className="h-4 w-4" />
@@ -168,6 +201,14 @@ export default function CompanyDocumentListPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Document Modal */}
+            <CompanyDocumentModal
+                isOpen={documentModal.isOpen}
+                onClose={() => setDocumentModal({ isOpen: false, editData: null })}
+                onSave={handleSaveDocument}
+                editData={documentModal.editData}
+            />
 
             {/* Delete Confirmation Modal */}
             <ConfirmModal

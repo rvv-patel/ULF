@@ -20,9 +20,9 @@ import CompanyFormPage from './modules/masters/company/CompanyFormPage';
 import BranchListPage from './modules/masters/branch/BranchListPage';
 import BranchFormPage from './modules/masters/branch/BranchFormPage';
 import ApplicationDocumentListPage from './modules/masters/applicationDocument/ApplicationDocumentListPage';
-import ApplicationDocumentFormPage from './modules/masters/applicationDocument/ApplicationDocumentFormPage';
+
 import CompanyDocumentListPage from './modules/masters/companyDocument/CompanyDocumentListPage';
-import CompanyDocumentFormPage from './modules/masters/companyDocument/CompanyDocumentFormPage';
+
 import OneDriveFileManager from './modules/files/OneDriveFileManager';
 import AppSettings from './modules/appSettings/AppSettings';
 import './index.css';
@@ -103,22 +103,10 @@ function App() {
           <Route element={<PermissionGuard permission="view_application_documents" />}>
             <Route path="/masters/application-documents" element={<ApplicationDocumentListPage />} />
           </Route>
-          <Route element={<PermissionGuard permission="add_application_documents" />}>
-            <Route path="/masters/application-documents/new" element={<ApplicationDocumentFormPage />} />
-          </Route>
-          <Route element={<PermissionGuard permission="edit_application_documents" />}>
-            <Route path="/masters/application-documents/:id/edit" element={<ApplicationDocumentFormPage />} />
-          </Route>
 
           {/* Company Documents */}
           <Route element={<PermissionGuard permission="view_company_documents" />}>
             <Route path="/masters/company-documents" element={<CompanyDocumentListPage />} />
-          </Route>
-          <Route element={<PermissionGuard permission="add_company_documents" />}>
-            <Route path="/masters/company-documents/new" element={<CompanyDocumentFormPage />} />
-          </Route>
-          <Route element={<PermissionGuard permission="edit_company_documents" />}>
-            <Route path="/masters/company-documents/:id/edit" element={<CompanyDocumentFormPage />} />
           </Route>
 
           {/* App Settings */}

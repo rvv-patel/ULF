@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const BranchModel = require('../models/branchModel');
 
 const APPLICATIONS_PATH = path.join(__dirname, '../data/applications.json');
 const USERS_PATH = path.join(__dirname, '../data/users.json');
 const COMPANIES_PATH = path.join(__dirname, '../data/companies.json');
-const BRANCHES_PATH = path.join(__dirname, '../data/branches.json');
 
 const readJsonFile = (filePath) => {
     try {
@@ -16,21 +16,22 @@ const readJsonFile = (filePath) => {
     }
 };
 
-exports.getDashboardStats = (req, res) => {
+exports.getDashboardStats = async (req, res) => {
     try {
         const applications = readJsonFile(APPLICATIONS_PATH);
         const users = readJsonFile(USERS_PATH);
         const companies = readJsonFile(COMPANIES_PATH);
-        const branches = readJsonFile(BRANCHES_PATH);
 
-        if (!applications || !users || !companies || !branches) {
+        // Fetch branches from PostgreSQL
+        const branchList = await BranchModel.getAll();
+
+        if (!applications || !users || !companies) {
             return res.status(500).json({ error: 'Failed to read data files' });
         }
 
         const appList = applications.applications || [];
         const userList = users.users || [];
         const companyList = companies.companies || [];
-        const branchList = branches.branches || [];
 
         // Calculate application statistics
         const statusCounts = appList.reduce((acc, app) => {

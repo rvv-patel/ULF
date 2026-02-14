@@ -1,28 +1,29 @@
 import React from 'react';
 import { Trash2, ArrowUpDown, ArrowUp, ArrowDown, LogOut, Eye } from 'lucide-react';
 import type { User } from '../types';
+import type { Branch } from '../../../modules/masters/branch/types';
 import { useAuth } from '../../../context/AuthContext';
 
 interface UserTableProps {
     users: User[];
+    branches: Branch[];
     isLoading: boolean;
     sortConfig: { field: keyof User; direction: 'asc' | 'desc' } | null;
     onSort: (field: keyof User) => void;
     onDelete: (id: number, firstName: string, lastName: string) => void;
     onEdit: (id: number) => void;
-    onAssignBranch: (user: User) => void;
     onAssignCompany: (user: User) => void;
     onForceLogout: (user: User) => void;
 }
 
 export const UserTable: React.FC<UserTableProps> = ({
     users,
+    branches,
     isLoading,
     sortConfig,
     onSort,
     onDelete,
     onEdit,
-    onAssignBranch,
     onAssignCompany,
     onForceLogout
 }) => {
@@ -99,15 +100,8 @@ export const UserTable: React.FC<UserTableProps> = ({
                             </td>
                             <td className="p-4 text-sm text-gray-600">{user.email}</td>
                             <td className="p-4 text-sm text-gray-600">{user.phone}</td>
-                            <td className="p-4 text-sm">
-                                {hasPermission('assign_user_branches') && (
-                                    <button
-                                        onClick={() => onAssignBranch(user)}
-                                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-sm transition-colors"
-                                    >
-                                        View/Assign
-                                    </button>
-                                )}
+                            <td className="p-4 text-sm text-gray-600">
+                                {branches.find(b => b.id === user.branchId)?.name || '-'}
                             </td>
                             <td className="p-4 text-sm">
                                 {hasPermission('assign_user_companies') && (

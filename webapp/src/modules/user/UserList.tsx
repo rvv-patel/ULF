@@ -31,9 +31,9 @@ export default function UserList() {
     // Assignment Modal State
     const [assignmentModal, setAssignmentModal] = useState<{
         isOpen: boolean;
-        type: 'branch' | 'company';
+        type: 'company';
         user: User | null;
-    }>({ isOpen: false, type: 'branch', user: null });
+    }>({ isOpen: false, type: 'company', user: null });
 
     // Force Logout Confirmation Modal State
     const [forceLogoutModal, setForceLogoutModal] = useState<{
@@ -112,10 +112,6 @@ export default function UserList() {
         navigate(`/users/${id}/edit`);
     };
 
-    const handleAssignBranch = (user: User) => {
-        setAssignmentModal({ isOpen: true, type: 'branch', user });
-    };
-
     const handleAssignCompany = (user: User) => {
         setAssignmentModal({ isOpen: true, type: 'company', user });
     };
@@ -125,7 +121,7 @@ export default function UserList() {
 
         const updatedUser: User = {
             ...assignmentModal.user,
-            [assignmentModal.type === 'branch' ? 'assignedBranches' : 'assignedCompanies']: selectedIds
+            assignedCompanies: selectedIds.map(id => Number(id))
         };
 
         try {
@@ -211,11 +207,11 @@ export default function UserList() {
                         <UserTable
                             users={filteredUsers}
                             isLoading={loading}
+                            branches={branches}
                             sortConfig={sortConfig}
                             onSort={handleSort}
                             onDelete={handleDelete}
                             onEdit={handleEdit}
-                            onAssignBranch={handleAssignBranch}
                             onAssignCompany={handleAssignCompany}
                             onForceLogout={handleForceLogout}
                         />
@@ -233,13 +229,11 @@ export default function UserList() {
             {/* Assignment Modal */}
             <AssignmentModal
                 isOpen={assignmentModal.isOpen}
-                title={assignmentModal.type === 'branch' ? 'Assign Branch' : 'Assign Company'}
-                items={assignmentModal.type === 'branch' ? branches : companies}
+                title="Assign Company"
+                items={companies}
                 selectedIds={
                     assignmentModal.user
-                        ? (assignmentModal.type === 'branch'
-                            ? assignmentModal.user.assignedBranches || []
-                            : assignmentModal.user.assignedCompanies || [])
+                        ? (assignmentModal.user.assignedCompanies || [])
                         : []
                 }
                 onClose={() => setAssignmentModal(prev => ({ ...prev, isOpen: false }))}
