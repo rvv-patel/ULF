@@ -35,7 +35,7 @@ const includesIgnoreCase = (text, term) => {
     return (text || '').toString().toLowerCase().includes((term || '').toLowerCase());
 };
 
-exports.getAll = (req, res) => {
+exports.getAll = async (req, res) => {
     try {
         const db = readDb();
         let items = db.applications;
@@ -59,25 +59,30 @@ exports.getAll = (req, res) => {
         if (req.user && req.user.role !== 'Admin') {
             const assignedCompanyIds = req.user.assignedCompanies || [];
 
-            // Read companies.json to map IDs to Names
-            const COMPANIES_PATH = path.join(__dirname, '../data/companies.json');
+            // Use CompanyModel to get company names from PostgreSQL
             let allowedCompanyNames = [];
 
             try {
-                if (fs.existsSync(COMPANIES_PATH)) {
-                    const companiesData = JSON.parse(fs.readFileSync(COMPANIES_PATH, 'utf8'));
-                    allowedCompanyNames = companiesData.companies
-                        .filter(c => assignedCompanyIds.includes(c.id))
-                        .map(c => c.name);
+                if (assignedCompanyIds.length > 0) {
+                    const pool = require('../config/database');
+                    const result = await pool.query(
+                        'SELECT id, name FROM companies WHERE id = ANY($1::int[])',
+                        [assignedCompanyIds]
+                    );
+                    allowedCompanyNames = result.rows.map(c => c.name);
+                    console.log(`[Access Control] User ${req.user.email} can access companies:`, allowedCompanyNames);
+                } else {
+                    console.log(`[Access Control] User ${req.user.email} has no assigned companies`);
                 }
             } catch (err) {
-                console.error('Error reading companies for access control:', err);
-                // Fallback: if error, allow none or handle gracefully. 
-                // Here we strict fail safe: allow none if we can't verify.
+                console.error('Error fetching companies for access control:', err);
+                // Fallback: if error, allow none for security
+                allowedCompanyNames = [];
             }
 
             // Apply filter: application.company must be in allowed list
             items = items.filter(item => allowedCompanyNames.includes(item.company));
+            console.log(`[Access Control] Filtered to ${items.length} applications for user ${req.user.email}`);
         }
 
         if (search) {

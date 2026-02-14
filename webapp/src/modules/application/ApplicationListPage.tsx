@@ -11,6 +11,7 @@ import type { Application } from './types';
 import { printApplication } from '../../utils/printApplication';
 import { FileText } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function ApplicationListPage() {
     const dispatch = useAppDispatch();
@@ -25,6 +26,14 @@ export default function ApplicationListPage() {
     const [dateTo, setDateTo] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<{ field: keyof Application; direction: 'asc' | 'desc' } | null>(null);
+
+    // Debounce search and filter values to reduce API calls
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
+    const debouncedCompany = useDebounce(selectedCompany, 300);
+    const debouncedBranch = useDebounce(selectedBranch, 300);
+    const debouncedStatus = useDebounce(selectedStatus, 300);
+    const debouncedDateFrom = useDebounce(dateFrom, 300);
+    const debouncedDateTo = useDebounce(dateTo, 300);
 
     const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; appId: number | null; appTitle: string }>(
         { isOpen: false, appId: null, appTitle: '' }
@@ -42,20 +51,21 @@ export default function ApplicationListPage() {
 
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
+    // Fetch applications with debounced values
     React.useEffect(() => {
         dispatch(fetchApplications({
             page: currentPage,
             limit: itemsPerPage,
-            search: searchTerm,
+            search: debouncedSearchTerm,
             sortBy: sortConfig?.field,
             order: sortConfig?.direction,
-            company: selectedCompany,
-            branch: selectedBranch,
-            status: selectedStatus,
-            dateFrom: dateFrom,
-            dateTo: dateTo
+            company: debouncedCompany,
+            branch: debouncedBranch,
+            status: debouncedStatus,
+            dateFrom: debouncedDateFrom,
+            dateTo: debouncedDateTo
         }));
-    }, [dispatch, currentPage, itemsPerPage, searchTerm, sortConfig, selectedCompany, selectedBranch, selectedStatus, dateFrom, dateTo]);
+    }, [dispatch, currentPage, itemsPerPage, debouncedSearchTerm, sortConfig, debouncedCompany, debouncedBranch, debouncedStatus, debouncedDateFrom, debouncedDateTo]);
 
     const handleSearchChange = (value: string) => {
         setSearchTerm(value);
@@ -90,14 +100,14 @@ export default function ApplicationListPage() {
             const params = {
                 page: 1,
                 limit: 10000, // Large limit to get all
-                search: searchTerm,
+                search: debouncedSearchTerm,
                 sortBy: sortConfig?.field,
                 order: sortConfig?.direction,
-                company: selectedCompany,
-                branch: selectedBranch,
-                status: selectedStatus,
-                dateFrom: dateFrom,
-                dateTo: dateTo
+                company: debouncedCompany,
+                branch: debouncedBranch,
+                status: debouncedStatus,
+                dateFrom: debouncedDateFrom,
+                dateTo: debouncedDateTo
             };
 
             // Re-implementing fetch logic locally for export to avoid messing with redux state

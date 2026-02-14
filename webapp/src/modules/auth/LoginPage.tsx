@@ -1,34 +1,39 @@
-import React, { useState } from 'react';
+import { useActionState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { Lock, Mail, Loader2, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import projectLogo from '../../assets/project-logo.png';
 
+// Define the state type for the action
+interface LoginState {
+    error: string | null;
+}
+
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
+    // Form Action Handler
+    const loginAction = async (_: LoginState, formData: FormData): Promise<LoginState> => {
+        const email = formData.get('email') as string;
+        const password = formData.get('password') as string;
 
         try {
             const response = await api.post('/auth/login', { email, password });
             const { token, user } = response.data;
             login(token, user);
             navigate('/');
+            return { error: null };
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to login. Please check your credentials.');
-        } finally {
-            setIsLoading(false);
+            return {
+                error: err.response?.data?.message || 'Failed to login. Please check your credentials.'
+            };
         }
     };
+
+    // React 19 useActionState hook
+    const [state, formAction, isPending] = useActionState(loginAction, { error: null });
 
     return (
         <div className="flex h-screen w-full items-center justify-center overflow-hidden bg-[#eef2f6] relative">
@@ -97,16 +102,16 @@ export default function LoginPage() {
                             <p className="text-gray-500 font-medium">Please enter your credentials to access the portal.</p>
                         </div>
 
-                        {error && (
+                        {state.error && (
                             <div className="bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-2xl p-4 flex items-center gap-4 animate-shake">
                                 <div className="p-2 bg-red-100 rounded-full text-red-600">
                                     <AlertCircle className="w-5 h-5" />
                                 </div>
-                                <p className="text-sm font-medium text-red-600">{error}</p>
+                                <p className="text-sm font-medium text-red-600">{state.error}</p>
                             </div>
                         )}
 
-                        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                        <form className="mt-8 space-y-6" action={formAction}>
                             <div className="space-y-6">
                                 <div className="group space-y-2">
                                     <label className="text-sm font-bold text-gray-700 ml-1 uppercase tracking-wider text-[11px]">Email Address</label>
@@ -115,10 +120,9 @@ export default function LoginPage() {
                                             <Mail className="h-5 w-5 text-gray-400 group-focus-within:text-blue-600 transition-colors duration-300" />
                                         </div>
                                         <input
+                                            name="email"
                                             type="email"
                                             required
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
                                             className="block w-full pl-12 pr-4 py-4 bg-white/50 border border-gray-200/60 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all duration-300 shadow-sm hover:bg-white/80"
                                             placeholder="name@company.com"
                                         />
@@ -135,10 +139,9 @@ export default function LoginPage() {
                                             <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-600 transition-colors duration-300" />
                                         </div>
                                         <input
+                                            name="password"
                                             type="password"
                                             required
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
                                             className="block w-full pl-12 pr-4 py-4 bg-white/50 border border-gray-200/60 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all duration-300 shadow-sm hover:bg-white/80"
                                             placeholder="••••••••"
                                         />
@@ -162,11 +165,11 @@ export default function LoginPage() {
 
                             <button
                                 type="submit"
-                                disabled={isLoading}
+                                disabled={isPending}
                                 className="w-full relative group flex items-center justify-center py-4 px-4 bg-gray-900 overflow-hidden text-white font-bold rounded-2xl shadow-xl shadow-blue-900/10 transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
                             >
                                 <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
-                                {isLoading ? (
+                                {isPending ? (
                                     <span className="flex items-center gap-2">
                                         <Loader2 className="animate-spin h-5 w-5 text-white/80" />
                                         <span>Authenticating...</span>

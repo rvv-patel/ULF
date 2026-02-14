@@ -36,10 +36,11 @@ export default function Header({
         // Fetch initially
         dispatch(fetchNotifications());
 
-        // Poll every 60 seconds
+        // Poll every 5 minutes (300 seconds) instead of 60 seconds
+        // This reduces API load and prevents rate limiting
         const interval = setInterval(() => {
             dispatch(fetchNotifications());
-        }, 60000);
+        }, 300000); // Changed from 60000 to 300000
 
         return () => clearInterval(interval);
     }, [dispatch]);

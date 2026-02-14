@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     FileText,
@@ -62,17 +62,45 @@ interface DashboardStats {
     };
 }
 
+// Helper functions moved outside component for performance optimization
+const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+        case 'completed':
+        case 'approved':
+            return <CheckCircle className="h-4 w-4" />;
+        case 'pending':
+            return <Clock className="h-4 w-4" />;
+        case 'rejected':
+        case 'cancelled':
+            return <XCircle className="h-4 w-4" />;
+        default:
+            return <AlertCircle className="h-4 w-4" />;
+    }
+};
+
+const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+        case 'completed':
+        case 'approved':
+            return 'bg-green-100 text-green-800 border-green-200';
+        case 'pending':
+            return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        case 'rejected':
+        case 'cancelled':
+            return 'bg-red-100 text-red-800 border-red-200';
+        default:
+            return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+};
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchDashboardStats();
-    }, []);
-
-    const fetchDashboardStats = async () => {
+    // Memoized with useCallback for performance
+    const fetchDashboardStats = useCallback(async () => {
         try {
             setIsLoading(true);
             const response = await api.get('/dashboard/stats');
@@ -83,37 +111,11 @@ export default function Dashboard() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    const getStatusIcon = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed':
-            case 'approved':
-                return <CheckCircle className="h-4 w-4" />;
-            case 'pending':
-                return <Clock className="h-4 w-4" />;
-            case 'rejected':
-            case 'cancelled':
-                return <XCircle className="h-4 w-4" />;
-            default:
-                return <AlertCircle className="h-4 w-4" />;
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed':
-            case 'approved':
-                return 'bg-green-100 text-green-800 border-green-200';
-            case 'pending':
-                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case 'rejected':
-            case 'cancelled':
-                return 'bg-red-100 text-red-800 border-red-200';
-            default:
-                return 'bg-gray-100 text-gray-800 border-gray-200';
-        }
-    };
+    useEffect(() => {
+        fetchDashboardStats();
+    }, [fetchDashboardStats]);
 
     if (isLoading) {
         return (
@@ -377,7 +379,7 @@ export default function Dashboard() {
     );
 }
 
-// Stat Card Component
+// Stat Card Component - Memoized for performance
 interface StatCardProps {
     title: string;
     value: number;
@@ -388,7 +390,7 @@ interface StatCardProps {
     onClick?: () => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon: Icon, color, trend, onClick }) => {
+const StatCard: React.FC<StatCardProps> = memo(({ title, value, subtitle, icon: Icon, color, trend, onClick }) => {
     const colorClasses = {
         blue: 'bg-blue-50 text-blue-600 border-blue-100',
         teal: 'bg-teal-50 text-teal-600 border-teal-100',
@@ -418,9 +420,11 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon: Icon,
             <p className="text-xs text-slate-500 mt-2">{trend}</p>
         </div>
     );
-};
+});
 
-// Mini Stat Card Component
+StatCard.displayName = 'StatCard';
+
+// Mini Stat Card Component - Memoized for performance
 interface MiniStatCardProps {
     title: string;
     value: number | string;
@@ -430,7 +434,7 @@ interface MiniStatCardProps {
     isText?: boolean;
 }
 
-const MiniStatCard: React.FC<MiniStatCardProps> = ({ title, value, total, icon: Icon, color, isText = false }) => {
+const MiniStatCard: React.FC<MiniStatCardProps> = memo(({ title, value, total, icon: Icon, color, isText = false }) => {
     const colorClasses = {
         orange: 'bg-orange-50 text-orange-600',
         yellow: 'bg-yellow-50 text-yellow-600',
@@ -454,4 +458,6 @@ const MiniStatCard: React.FC<MiniStatCardProps> = ({ title, value, total, icon: 
             </div>
         </div>
     );
-};
+});
+
+MiniStatCard.displayName = 'MiniStatCard';

@@ -45,9 +45,18 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Rate Limiting - After CORS
+// More permissive for development, adjust for production
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limit each IP to 100 requests per windowMs
+    max: 500, // increased from 100 to 500 requests per window
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: 'Too many requests from this IP, please try again later.',
+    // Skip rate limiting for certain routes if needed
+    skip: (req) => {
+        // Skip rate limiting for health check
+        return req.path === '/';
+    }
 });
 app.use(limiter);
 
