@@ -1,7 +1,7 @@
 
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Header from './Header';
-import { LayoutList, Users, ShieldCheck, FileText, Building2, Store, FileCheck, FolderCheck, Cloud } from 'lucide-react';
+import { LayoutList, Users, ShieldCheck, FileText, Building2, Store, FileCheck, FolderCheck, Cloud, BarChart3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
@@ -18,6 +18,8 @@ export default function Layout() {
     const isApplicationDocumentActive = location.pathname.startsWith('/masters/application-documents');
     const isCompanyDocumentActive = location.pathname.startsWith('/masters/company-documents');
     const isFilesActive = location.pathname.startsWith('/files');
+    const isReportsActive = location.pathname.startsWith('/reports');
+    const isAuditLogsActive = location.pathname.startsWith('/audit-logs');
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -144,6 +146,18 @@ export default function Layout() {
                             title="Company Documents"
                         >
                             <FolderCheck className="h-6 w-6" />
+                        </button>
+                    )}
+                    {hasPermission('view_reports') && (
+                        <button
+                            onClick={() => navigate('/reports')}
+                            className={`p-3 rounded-xl transition-all ${isReportsActive || isAuditLogsActive
+                                ? 'bg-blue-50 text-blue-600 shadow-sm'
+                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                                }`}
+                            title="Reports"
+                        >
+                            <BarChart3 className="h-6 w-6" />
                         </button>
                     )}
                 </nav>

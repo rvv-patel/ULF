@@ -6,12 +6,12 @@ import api from '../../api/axios';
 // Async Thunks
 export const fetchPermissions = createAsyncThunk('role/fetchPermissions', async () => {
     const response = await api.get('/permissions');
-    return response.data;
+    return response.data.permissions || [];
 });
 
 export const fetchRoles = createAsyncThunk('role/fetchRoles', async () => {
     const response = await api.get('/roles');
-    return response.data;
+    return response.data.roles || [];
 });
 
 export const addRole = createAsyncThunk('role/addRole', async (roleData: Omit<Role, 'id' | 'userCount'>) => {

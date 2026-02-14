@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { logAction } = require('../controllers/auditLog.controller');
 
 const DB_PATH = path.join(__dirname, '../data/applications.json');
 
@@ -43,8 +44,8 @@ exports.getAll = (req, res) => {
             page = 1,
             limit = 10,
             search = '',
-            sortBy = '',
-            order = 'asc',
+            sortBy = 'id',
+            order = 'desc',
             company = '',
             branch = '',
             status = '',
@@ -155,38 +156,18 @@ exports.getById = (req, res) => {
     }
 };
 
-const APP_SETTINGS_PATH = path.join(__dirname, '../data/appSettings.json');
-
-// Helper to read App Settings
-const readAppSettings = () => {
-    try {
-        if (!fs.existsSync(APP_SETTINGS_PATH)) return {};
-        const data = fs.readFileSync(APP_SETTINGS_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return {};
-    }
-};
-
-// Helper to write App Settings
-const writeAppSettings = (data) => {
-    try {
-        fs.writeFileSync(APP_SETTINGS_PATH, JSON.stringify(data, null, 2));
-    } catch (err) {
-        console.error('Error writing app settings:', err);
-    }
-};
+const AppSettingsModel = require('../models/appSettingsModel');
 
 // Helper: generate unique file number based on settings
-const generateFileNumber = (db) => {
+const generateFileNumber = async (db) => {
     let fileNumber;
     let isUnique = false;
 
-    // Read current settings
-    const settings = readAppSettings();
+    // Read current settings from DB
+    const settings = await AppSettingsModel.getAll();
     let prefix = settings.fileNumberPrefix || 'ULF';
-    let sequence = settings.fileNumberSequence || 1000;
-    let padding = settings.padding !== undefined ? settings.padding : 4;
+    let sequence = parseInt(settings.fileNumberSequence) || 1000;
+    let padding = parseInt(settings.padding) || 4;
 
     // Safety break to prevent infinite loops
     let attempts = 0;
@@ -199,7 +180,7 @@ const generateFileNumber = (db) => {
         isUnique = !db.applications.some(item => item.fileNumber === fileNumber);
 
         if (!isUnique) {
-            // Collision found, increment sequence and try again
+            // Collision found, increment sequence and try again locally for this loop
             sequence++;
         }
         attempts++;
@@ -212,8 +193,7 @@ const generateFileNumber = (db) => {
     } else {
         // Success! Update the sequence in appSettings for the NEXT one
         // We save sequence + 1 so the next call gets a new number
-        settings.fileNumberSequence = sequence + 1;
-        writeAppSettings(settings);
+        await AppSettingsModel.set('fileNumberSequence', sequence + 1);
     }
 
     return fileNumber;
@@ -225,7 +205,7 @@ exports.create = async (req, res) => {
         const newItem = {
             id: Date.now(), // simple ID generation
             ...req.body,
-            fileNumber: generateFileNumber(db) // Override/Set fileNumber
+            fileNumber: await generateFileNumber(db) // Override/Set fileNumber
         };
         db.applications.push(newItem);
         writeDb(db);
@@ -264,6 +244,11 @@ exports.create = async (req, res) => {
         }
 
         res.status(201).json(newItem);
+
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Create', 'Applications', `Created application ${newItem.fileNumber}`, req);
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -280,6 +265,12 @@ exports.update = (req, res) => {
 
         db.applications[index] = { ...db.applications[index], ...updateData };
         writeDb(db);
+
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Update', 'Applications', `Updated application ${db.applications[index].fileNumber}`, req);
+        }
+
         res.json(db.applications[index]);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -297,6 +288,12 @@ exports.delete = (req, res) => {
         }
 
         writeDb(db);
+
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Delete', 'Applications', `Deleted application ID ${req.params.id}`, req);
+        }
+
         res.json({ message: 'Deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });

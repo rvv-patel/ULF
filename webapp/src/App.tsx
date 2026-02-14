@@ -20,6 +20,8 @@ import CompanyFormPage from './modules/masters/company/CompanyFormPage';
 import BranchListPage from './modules/masters/branch/BranchListPage';
 import BranchFormPage from './modules/masters/branch/BranchFormPage';
 import ApplicationDocumentListPage from './modules/masters/applicationDocument/ApplicationDocumentListPage';
+import AuditLogPage from './modules/auditLog/AuditLogPage';
+import ReportsPage from './modules/reports/ReportsPage';
 
 import CompanyDocumentListPage from './modules/masters/companyDocument/CompanyDocumentListPage';
 
@@ -119,6 +121,16 @@ function App() {
           {/* <Route element={<PermissionGuard permission="manage_settings" />}> */}
           <Route path="/settings" element={<AppSettings />} />
           {/* </Route> */}
+
+          {/* Reports Dashboard */}
+          <Route element={<PermissionGuard permission="view_reports" />}>
+            <Route path="/reports" element={<ReportsPage />} />
+          </Route>
+
+          {/* Audit Logs */}
+          <Route element={<PermissionGuard permission="view_audit_logs" />}>
+            <Route path="/audit-logs" element={<AuditLogPage />} />
+          </Route>
         </Route>
       </Route>
 

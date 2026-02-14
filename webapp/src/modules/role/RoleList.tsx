@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { RoleTable } from './components/RoleTable';
 import { deleteRole, fetchRoles } from '../../store/slices/roleSlice';
+import { fetchUsers } from '../../store/slices/userSlice';
 import { ShieldCheck, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useState } from 'react';
 import ConfirmModal from '../../components/ConfirmModal';
+import UserListModal from './components/UserListModal';
+import type { User } from '../../context/AuthContext';
 
 export default function RoleList() {
     const dispatch = useAppDispatch();
@@ -21,15 +24,30 @@ export default function RoleList() {
         roleName: string;
     }>({ isOpen: false, roleId: null, roleName: '' });
 
+    const [userModal, setUserModal] = useState<{
+        isOpen: boolean;
+        roleName: string;
+        users: User[];
+    }>({ isOpen: false, roleName: '', users: [] });
+
     useEffect(() => {
         dispatch(fetchRoles());
+        dispatch(fetchUsers());
     }, [dispatch]);
 
-    // Calculate dynamic user count for each role
     const rolesWithCount = roles.map(role => ({
         ...role,
-        userCount: users.filter(user => user.role === role.name).length
+        userCount: role.userCount // Use backend provided count
     }));
+
+    const handleUserClick = (roleName: string) => {
+        const roleUsers = users.filter(user => user.role === roleName);
+        setUserModal({
+            isOpen: true,
+            roleName: roleName,
+            users: roleUsers as unknown as User[] // Type casting if needed due to potential mismatch in User type definition
+        });
+    };
 
     const handleDelete = (id: number, name: string) => {
         setDeleteModal({
@@ -78,6 +96,7 @@ export default function RoleList() {
                         isLoading={false}
                         onDelete={handleDelete}
                         onEdit={handleEdit}
+                        onUserClick={handleUserClick}
                     />
                 </div>
             </div>
@@ -92,6 +111,14 @@ export default function RoleList() {
                 type="danger"
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModal({ isOpen: false, roleId: null, roleName: '' })}
+            />
+
+            {/* User List Modal */}
+            <UserListModal
+                isOpen={userModal.isOpen}
+                onClose={() => setUserModal({ isOpen: false, roleName: '', users: [] })}
+                users={userModal.users}
+                roleName={userModal.roleName}
             />
         </div>
     );

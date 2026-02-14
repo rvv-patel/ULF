@@ -8,13 +8,15 @@ interface RoleTableProps {
     isLoading: boolean;
     onDelete: (id: number, name: string) => void;
     onEdit: (id: number) => void;
+    onUserClick: (roleName: string) => void;
 }
 
 export const RoleTable: React.FC<RoleTableProps> = ({
     roles,
     isLoading,
     onDelete,
-    onEdit
+    onEdit,
+    onUserClick
 }) => {
     const { hasPermission } = useAuth();
     if (isLoading) {
@@ -44,9 +46,12 @@ export const RoleTable: React.FC<RoleTableProps> = ({
                             </td>
                             <td className="p-4 text-sm text-gray-600 max-w-xs truncate">{role.description}</td>
                             <td className="p-4 text-sm text-gray-600">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                <button
+                                    onClick={() => onUserClick(role.name)}
+                                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+                                >
                                     {role.userCount} users
-                                </span>
+                                </button>
                             </td>
                             <td className="p-4 text-right">
                                 <div className="flex items-center justify-end gap-2">

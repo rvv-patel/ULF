@@ -12,7 +12,7 @@ export const fetchCompanies = createAsyncThunk(
 
 export const addCompany = createAsyncThunk(
     'company/addCompany',
-    async (company: { name: string; emails: string[] }) => {
+    async (company: { name: string; address?: string; emails: string[] }) => {
         const response = await api.post('/companies', company);
         return response.data;
     }
@@ -20,7 +20,7 @@ export const addCompany = createAsyncThunk(
 
 export const updateCompany = createAsyncThunk(
     'company/updateCompany',
-    async (company: { id: number; name: string; emails: string[] }) => {
+    async (company: { id: number; name: string; address?: string; emails: string[] }) => {
         const response = await api.put(`/companies/${company.id}`, company);
         return response.data;
     }
@@ -37,6 +37,7 @@ export const deleteCompany = createAsyncThunk(
 export interface Company {
     id: number;
     name: string;
+    address?: string;
     emails: string[];
 }
 

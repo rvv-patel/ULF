@@ -38,7 +38,7 @@ export const updateSettings = createAsyncThunk(
     'appSettings/updateSettings',
     async (settings: AppSettings) => {
         const response = await api.put('/app-settings', settings);
-        return response.data;
+        return response.data.settings;
     }
 );
 

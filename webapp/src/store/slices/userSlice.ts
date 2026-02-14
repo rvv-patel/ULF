@@ -6,7 +6,7 @@ import api from '../../api/axios';
 // Async Thunks
 export const fetchUsers = createAsyncThunk('user/fetchUsers', async () => {
     const response = await api.get('/users');
-    return response.data;
+    return response.data.users || [];
 });
 
 export const addUser = createAsyncThunk('user/addUser', async (userData: Omit<User, 'id'>) => {

@@ -7,6 +7,7 @@ import branchReducer from './slices/branchSlice';
 import applicationDocumentReducer from './slices/applicationDocumentSlice';
 import companyDocumentReducer from './slices/companyDocumentSlice';
 import appSettingsReducer from './slices/appSettingsSlice';
+import notificationReducer from './slices/notificationSlice';
 
 export const store = configureStore({
     reducer: {
@@ -18,6 +19,7 @@ export const store = configureStore({
         applicationDocument: applicationDocumentReducer,
         companyDocument: companyDocumentReducer,
         appSettings: appSettingsReducer,
+        notifications: notificationReducer,
     },
 });
 

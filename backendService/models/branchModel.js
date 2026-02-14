@@ -19,7 +19,7 @@ class BranchModel {
     static async getAll() {
         try {
             const result = await pool.query(
-                'SELECT * FROM branches ORDER BY name ASC'
+                'SELECT * FROM branches ORDER BY "createdAt" DESC'
             );
             return result.rows.map(row => this.normalize(row));
         } catch (error) {

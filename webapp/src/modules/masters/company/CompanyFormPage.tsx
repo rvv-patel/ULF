@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { addCompany, updateCompany, fetchCompanies } from '../../../store/slices/companySlice';
-import { Trash2, Plus, Mail } from 'lucide-react';
+import { Trash2, Plus, Mail, MapPin } from 'lucide-react';
 
 export default function CompanyFormPage() {
     const { id } = useParams();
@@ -21,11 +21,13 @@ export default function CompanyFormPage() {
     }, [dispatch, isEditMode, items.length]);
 
     const [name, setName] = useState('');
+    const [address, setAddress] = useState('');
     const [emails, setEmails] = useState<string[]>(['']);
 
     useEffect(() => {
         if (existingItem) {
             setName(existingItem.name);
+            setAddress(existingItem.address || '');
             setEmails(existingItem.emails.length > 0 ? existingItem.emails : ['']);
         }
     }, [existingItem]);
@@ -58,6 +60,7 @@ export default function CompanyFormPage() {
 
         const payload = {
             name,
+            address,
             emails: validEmails
         };
 
@@ -93,6 +96,20 @@ export default function CompanyFormPage() {
                             onChange={(e) => setName(e.target.value)}
                             required
                         />
+                    </div>
+
+                    {/* Address Section */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                        <div className="relative">
+                            <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                            <textarea
+                                placeholder="e.g. 123 Tech Park, Bangalore"
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-gray-300 min-h-[80px]"
+                                value={address}
+                                onChange={(e) => setAddress(e.target.value)}
+                            />
+                        </div>
                     </div>
 
                     {/* Emails Section */}

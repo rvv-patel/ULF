@@ -1,106 +1,98 @@
-const fs = require('fs');
-const path = require('path');
+const UserModel = require('../models/userModel');
 const bcrypt = require('bcryptjs');
+const { logAction } = require('../controllers/auditLog.controller');
 
-const DATA_FILE = path.join(__dirname, '../data/users.json');
-
-const readData = () => {
-    if (!fs.existsSync(DATA_FILE)) {
-        return { users: [] };
-    }
-    const data = fs.readFileSync(DATA_FILE);
+exports.getAllUsers = async (req, res) => {
     try {
-        return JSON.parse(data);
-    } catch (e) {
-        return { users: [] };
-    }
-};
-
-const writeData = (data) => {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
-
-exports.getAllUsers = (req, res) => {
-    try {
-        const data = readData();
-        res.json(data.users || []);
+        // Model returns camelCase
+        const users = await UserModel.getAll();
+        res.json({ users });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.getUserById = (req, res) => {
+exports.getUserById = async (req, res) => {
     try {
-        const data = readData();
-        const user = (data.users || []).find(u => u.id === parseInt(req.params.id));
-        if (!user) return res.status(404).json({ message: 'User not found' });
+        // Model returns camelCase
+        const user = await UserModel.getById(parseInt(req.params.id));
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
         res.json(user);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
-};
+}
 
 exports.createUser = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.users) data.users = [];
+        const { username, email, password, role } = req.body;
 
-        const plainPassword = req.body.password || 'Password@123';
-        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+        // Check exists
+        const existing = await UserModel.getByEmail(email);
+        if (existing) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
 
-        const newUser = {
-            id: Date.now(),
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const newUser = await UserModel.create({
             ...req.body,
-            password: hashedPassword,
-            // Ensure these fields are set if not provided
-            dateJoined: req.body.dateJoined || new Date().toISOString().split('T')[0],
-            status: req.body.status || 'active',
-            permissions: req.body.permissions || []
-        };
+            password: hashedPassword
+        });
 
-        data.users.unshift(newUser); // Add to beginning
-        writeData(data);
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Create', 'Users', `Created user ${newUser.username}`, req);
+        }
+
         res.status(201).json(newUser);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.updateUser = (req, res) => {
+exports.updateUser = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.users) return res.status(404).json({ message: 'User not found' });
+        const userId = parseInt(req.params.id);
+        const updates = req.body;
 
-        const index = data.users.findIndex(u => u.id === parseInt(req.params.id));
-        if (index === -1) return res.status(404).json({ message: 'User not found' });
+        if (updates.password) {
+            updates.password = await bcrypt.hash(updates.password, 10);
+        }
 
-        // Merge existing user with updates
-        data.users[index] = {
-            ...data.users[index],
-            ...req.body,
-            id: data.users[index].id // Prevent ID update
-        };
+        const updatedUser = await UserModel.update(userId, updates);
 
-        writeData(data);
-        res.json(data.users[index]);
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Update', 'Users', `Updated user ID ${userId}`, req);
+        }
+
+        res.json(updatedUser);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.deleteUser = (req, res) => {
+exports.deleteUser = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.users) return res.status(404).json({ message: 'User not found' });
+        const userId = parseInt(req.params.id);
+        const deleted = await UserModel.delete(userId);
 
-        const initialLength = data.users.length;
-        data.users = data.users.filter(u => u.id !== parseInt(req.params.id));
-
-        if (data.users.length === initialLength) {
+        if (!deleted) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        writeData(data);
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Delete', 'Users', `Deleted user ID ${userId}`, req);
+        }
+
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });

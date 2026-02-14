@@ -4,23 +4,9 @@ const oneDriveService = require('../services/onedriveService');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const CompanyModel = require('../models/companyModel');
 
-const DB_PATH = path.join(__dirname, '../data/companies.json');
 const APP_DB_PATH = path.join(__dirname, '../data/applications.json');
-
-const readDb = () => {
-    try {
-        if (!fs.existsSync(DB_PATH)) return { companies: [] };
-        const data = fs.readFileSync(DB_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return { companies: [] };
-    }
-};
-
-const writeDb = (data) => {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-};
 
 const readAppDb = () => {
     try {
@@ -82,32 +68,20 @@ router.post('/create-company-document', requireOneDriveAuth, async (req, res) =>
         // 1. Create in OneDrive
         const result = await oneDriveService.createCompanyDocument(req.accessToken, companyName, docType);
 
-        // 2. Save to DB
-        const db = readDb();
-        const company = (db.companies || []).find(c => c.name === companyName);
+        // 2. Save to DB (PostgreSQL)
+        const company = await CompanyModel.getByName(companyName);
 
         if (company) {
-            if (!company.documents) company.documents = [];
-            // Remove existing doc of same type/name if any to avoid duplicates
-            // Or just append. Since we overwrite in OneDrive (rename behavior?), let's append/update.
-            // Check if file with same ID exists? No ID is new.
-            // Check if file with same 'type' exists? 
-            // The frontend maps by Title.
-            // Let's store a custom object.
             const docData = {
                 id: result.id,
                 name: result.name,
                 webUrl: result.webUrl,
                 type: docType,
-                createdBy: createdBy || 'System', // Add createdBy
+                createdBy: createdBy || 'System',
                 createdDateTime: result.createdDateTime
             };
 
-            // Remove old entry for this ID if exists (unlikely)
-            company.documents = company.documents.filter(d => d.id !== result.id);
-            company.documents.push(docData);
-
-            writeDb(db);
+            await CompanyModel.addDocument(company.id, docData);
         } else {
             console.warn(`Company ${companyName} not found in DB, skipping persistence.`);
         }
@@ -200,17 +174,13 @@ router.get('/company-documents/:companyName', requireOneDriveAuth, async (req, r
     try {
         const { companyName } = req.params;
 
-        // Read from DB instead of OneDrive
-        const db = readDb();
-        const company = (db.companies || []).find(c => c.name === companyName);
+        // Read from DB (PostgreSQL)
+        const company = await CompanyModel.getByName(companyName);
 
         if (!company) {
             return res.json([]);
         }
 
-        // Return the documents array. 
-        // Frontend expects: { name, webUrl, id ... }
-        // Our DB stores exactly that.
         res.json(company.documents || []);
 
     } catch (error) {
@@ -285,24 +255,8 @@ router.delete('/files/:fileId', requireOneDriveAuth, async (req, res) => {
         // (Removed as per user request to only delete from DB)
 
 
-        // 2. Delete from DB
-        // Search all companies for this document ID
-        const db = readDb();
-        let updated = false;
-
-        if (db.companies) {
-            db.companies.forEach(company => {
-                if (company.documents) {
-                    const initialLen = company.documents.length;
-                    company.documents = company.documents.filter(d => d.id !== fileId);
-                    if (company.documents.length !== initialLen) updated = true;
-                }
-            });
-        }
-
-        if (updated) {
-            writeDb(db);
-        }
+        // 2. Delete from DB (PostgreSQL)
+        await CompanyModel.removeDocument(fileId);
 
         res.json({ success: true, message: 'Deleted from DB only' });
     } catch (error) {

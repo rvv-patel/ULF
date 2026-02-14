@@ -141,6 +141,7 @@ export default function CompanyListPage() {
                                 <thead>
                                     <tr className="border-b border-gray-200 bg-gray-50/50">
                                         <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Company Name</th>
+                                        <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</th>
                                         <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Configured Emails</th>
                                         <th className="p-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
@@ -162,6 +163,14 @@ export default function CompanyListPage() {
                                                         </div>
                                                         <span className="text-sm font-medium text-gray-900">{company.name}</span>
                                                     </div>
+                                                </td>
+                                                <td className="p-4 group/address relative">
+                                                    <span
+                                                        className="text-sm text-gray-600 truncate block max-w-[250px] cursor-help"
+                                                        title={company.address || ''}
+                                                    >
+                                                        {company.address || '-'}
+                                                    </span>
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="flex flex-wrap gap-2">

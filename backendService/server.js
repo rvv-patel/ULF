@@ -19,6 +19,8 @@ const permissionRoutes = require('./routes/permission.routes');
 const onedriveRoutes = require('./routes/onedrive');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const appSettingsRoutes = require('./routes/appSettingsRoutes');
+const auditLogRoutes = require('./routes/auditLog.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -66,6 +68,8 @@ app.use('/api/permissions', permissionRoutes);
 app.use('/api/onedrive', onedriveRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/app-settings', appSettingsRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/', (req, res) => {

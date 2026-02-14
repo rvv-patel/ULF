@@ -1,98 +1,76 @@
-const fs = require('fs');
-const path = require('path');
+const RoleModel = require('../models/roleModel');
+const { logAction } = require('../controllers/auditLog.controller');
 
-const DATA_FILE = path.join(__dirname, '../data/roles.json');
-
-const readData = () => {
-    if (!fs.existsSync(DATA_FILE)) {
-        return { roles: [] };
-    }
-    const data = fs.readFileSync(DATA_FILE);
+exports.getAllRoles = async (req, res) => {
     try {
-        return JSON.parse(data);
-    } catch (e) {
-        return { roles: [] };
-    }
-};
-
-const writeData = (data) => {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
-
-exports.getAllRoles = (req, res) => {
-    try {
-        const data = readData();
-        res.json(data.roles || []);
+        const roles = await RoleModel.getAll();
+        // Frontend expects { roles: [] }
+        res.json({ roles });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.getRoleById = (req, res) => {
+exports.getRoleById = async (req, res) => {
     try {
-        const data = readData();
-        const role = (data.roles || []).find(r => r.id === parseInt(req.params.id));
-        if (!role) return res.status(404).json({ message: 'Role not found' });
+        const role = await RoleModel.getById(parseInt(req.params.id));
+        if (!role) {
+            return res.status(404).json({ message: 'Role not found' });
+        }
         res.json(role);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.createRole = (req, res) => {
+exports.createRole = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.roles) data.roles = [];
+        const { name, description, permissions } = req.body;
 
-        const newRole = {
-            id: Date.now(),
-            ...req.body,
-            userCount: req.body.userCount || 0
-        };
+        // Validation handled by Model or DB constraint (name unique)
+        const newRole = await RoleModel.create({ name, description, permissions });
 
-        data.roles.push(newRole);
-        writeData(data);
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Create', 'Roles', `Created role ${name}`, req);
+        }
+
         res.status(201).json(newRole);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.updateRole = (req, res) => {
+exports.updateRole = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.roles) return res.status(404).json({ message: 'Role not found' });
+        const roleId = parseInt(req.params.id);
+        const updatedRole = await RoleModel.update(roleId, req.body);
 
-        const index = data.roles.findIndex(r => r.id === parseInt(req.params.id));
-        if (index === -1) return res.status(404).json({ message: 'Role not found' });
+        if (!updatedRole) {
+            return res.status(404).json({ message: 'Role not found' });
+        }
 
-        // Merge existing role with updates
-        data.roles[index] = {
-            ...data.roles[index],
-            ...req.body,
-            id: data.roles[index].id // Prevent ID update
-        };
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Update', 'Roles', `Updated role ID ${roleId}`, req);
+        }
 
-        writeData(data);
-        res.json(data.roles[index]);
+        res.json(updatedRole);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-exports.deleteRole = (req, res) => {
+exports.deleteRole = async (req, res) => {
     try {
-        const data = readData();
-        if (!data.roles) return res.status(404).json({ message: 'Role not found' });
+        const roleId = parseInt(req.params.id);
+        await RoleModel.delete(roleId);
 
-        const initialLength = data.roles.length;
-        data.roles = data.roles.filter(r => r.id !== parseInt(req.params.id));
-
-        if (data.roles.length === initialLength) {
-            return res.status(404).json({ message: 'Role not found' });
+        // Audit Log
+        if (req.user) {
+            logAction(req.user.userId, req.user.email, 'Delete', 'Roles', `Deleted role ID ${roleId}`, req);
         }
 
-        writeData(data);
         res.json({ message: 'Role deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });

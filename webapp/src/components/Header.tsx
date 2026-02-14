@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut, ChevronDown, Bell, Cloud } from 'lucide-react';
 import { useMsal } from "@azure/msal-react";
@@ -6,6 +6,9 @@ import projectLogo from '../assets/project-logo.png';
 
 import { useAuth } from '../context/AuthContext';
 import { loginRequest } from "../config/authConfig";
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { fetchNotifications } from '../store/slices/notificationSlice';
+import { NotificationDropdown } from './layout/NotificationDropdown';
 
 interface HeaderProps {
     userName?: string;
@@ -21,8 +24,25 @@ export default function Header({
     const { instance, accounts } = useMsal();
     const oneDriveConnected = accounts.length > 0;
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const navigate = useNavigate();
     const { logout, hasPermission } = useAuth();
+
+    // Notifications State
+    const dispatch = useAppDispatch();
+    const unreadNotificationCount = useAppSelector(state => state.notifications.unreadCount);
+
+    useEffect(() => {
+        // Fetch initially
+        dispatch(fetchNotifications());
+
+        // Poll every 60 seconds
+        const interval = setInterval(() => {
+            dispatch(fetchNotifications());
+        }, 60000);
+
+        return () => clearInterval(interval);
+    }, [dispatch]);
 
     const handleLogout = () => {
         logout();
@@ -161,10 +181,22 @@ export default function Header({
                         </div>
 
                         {/* Notifications */}
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative text-gray-600 hover:text-gray-900">
-                            <Bell className="h-5 w-5" />
-                            <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"></span>
-                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative text-gray-600 hover:text-gray-900"
+                            >
+                                <Bell className="h-5 w-5" />
+                                {unreadNotificationCount > 0 && (
+                                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
+                                )}
+                            </button>
+
+                            <NotificationDropdown
+                                isOpen={isNotificationOpen}
+                                onClose={() => setIsNotificationOpen(false)}
+                            />
+                        </div>
 
                         {/* User Profile Dropdown */}
                         <div className="relative">
