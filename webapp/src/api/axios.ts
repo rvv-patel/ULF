@@ -46,7 +46,10 @@ api.interceptors.response.use(
                 errorMessage.toLowerCase().includes('session') ||
                 errorMessage.toLowerCase().includes('token');
 
-            if (shouldLogout && !originalRequest._retry) {
+            // Exclude login endpoint from auto-logout/redirect
+            const isLoginRequest = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/login');
+
+            if (shouldLogout && !originalRequest._retry && !isLoginRequest) {
                 originalRequest._retry = true;
 
                 console.log('[Axios Interceptor] Silently logging out and redirecting...');
@@ -56,11 +59,14 @@ api.interceptors.response.use(
                 localStorage.removeItem('user');
                 sessionStorage.clear();
 
-                // Silent redirect - no alert
-                setTimeout(() => {
-                    console.log('[Axios Interceptor] Redirecting to login...');
-                    window.location.replace('/login');
-                }, 100);
+                // Check if we are already on the login page to avoid reload loop
+                if (window.location.pathname !== '/login') {
+                    // Silent redirect - no alert
+                    setTimeout(() => {
+                        console.log('[Axios Interceptor] Redirecting to login...');
+                        window.location.replace('/login');
+                    }, 100);
+                }
 
                 return Promise.reject(error);
             }

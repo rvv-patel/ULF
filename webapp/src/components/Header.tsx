@@ -22,7 +22,7 @@ export default function Header({
     const oneDriveConnected = accounts.length > 0;
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { logout, hasPermission } = useAuth();
 
     const handleLogout = () => {
         logout();
@@ -229,16 +229,18 @@ export default function Header({
                                                 <span>My Profile</span>
                                             </button>
 
-                                            <button
-                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                                onClick={() => {
-                                                    setIsDropdownOpen(false);
-                                                    navigate('/settings');
-                                                }}
-                                            >
-                                                <Settings className="h-4 w-4 text-gray-400" />
-                                                <span>Settings</span>
-                                            </button>
+                                            {hasPermission('view_settings') && (
+                                                <button
+                                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                                    onClick={() => {
+                                                        setIsDropdownOpen(false);
+                                                        navigate('/settings');
+                                                    }}
+                                                >
+                                                    <Settings className="h-4 w-4 text-gray-400" />
+                                                    <span>Settings</span>
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* Logout */}
