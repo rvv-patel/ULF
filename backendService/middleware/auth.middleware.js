@@ -65,8 +65,14 @@ const authorizePermission = (requiredPermission) => {
         try {
             const permissions = await UserModel.getPermissions(req.user.userId);
 
-            if (!permissions.includes(requiredPermission)) {
-                return res.status(403).json({ message: `Access Forbidden: Requires ${requiredPermission}` });
+            // Normalize requiredPermission to always be an array
+            const requiredPermissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+
+            // Check if user has at least one of the required permissions
+            const hasPermission = requiredPermissions.some(perm => permissions.includes(perm));
+
+            if (!hasPermission) {
+                return res.status(403).json({ message: `Access Forbidden: Requires one of [${requiredPermissions.join(', ')}]` });
             }
 
             next();

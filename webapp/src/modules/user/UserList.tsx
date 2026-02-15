@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { UserTable } from './components/UserTable';
 import { AssignmentModal } from './components/AssignmentModal';
+import { UserPasswordModal } from './components/UserPasswordModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import type { User } from './types';
 import { deleteUser, fetchUsers, updateUser } from '../../store/slices/userSlice';
@@ -34,6 +35,12 @@ export default function UserList() {
         type: 'company';
         user: User | null;
     }>({ isOpen: false, type: 'company', user: null });
+
+    // Password Modal State
+    const [passwordModal, setPasswordModal] = useState<{
+        isOpen: boolean;
+        user: User | null;
+    }>({ isOpen: false, user: null });
 
     // Force Logout Confirmation Modal State
     const [forceLogoutModal, setForceLogoutModal] = useState<{
@@ -157,6 +164,22 @@ export default function UserList() {
         }
     };
 
+    const handleSetPassword = (user: User) => {
+        setPasswordModal({ isOpen: true, user });
+    };
+
+    const handleSavePassword = async (password: string) => {
+        if (!passwordModal.user) return;
+
+        try {
+            await dispatch(updateUser({ id: passwordModal.user.id, password } as any)).unwrap();
+            alert(`Password successfully updated for ${passwordModal.user.firstName}`);
+            setPasswordModal({ isOpen: false, user: null });
+        } catch (err) {
+            throw new Error('Failed to set password: ' + err);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50/50 p-4">
             <div className="max-w-[1600px] mx-auto">
@@ -215,6 +238,7 @@ export default function UserList() {
                             onEdit={handleEdit}
                             onAssignCompany={handleAssignCompany}
                             onForceLogout={handleForceLogout}
+                            onSetPassword={handleSetPassword}
                         />
                     </div>
 
@@ -239,6 +263,14 @@ export default function UserList() {
                 }
                 onClose={() => setAssignmentModal(prev => ({ ...prev, isOpen: false }))}
                 onSave={handleSaveAssignment}
+            />
+
+            {/* Password Modal */}
+            <UserPasswordModal
+                isOpen={passwordModal.isOpen}
+                user={passwordModal.user}
+                onClose={() => setPasswordModal({ isOpen: false, user: null })}
+                onSave={handleSavePassword}
             />
 
             {/* Force Logout Confirmation Modal */}

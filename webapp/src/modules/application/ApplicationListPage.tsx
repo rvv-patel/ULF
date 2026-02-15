@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { ApplicationFilters } from './components/ApplicationFilters';
 import { ApplicationTable } from './components/ApplicationTable';
@@ -18,14 +18,25 @@ export default function ApplicationListPage() {
     const navigate = useNavigate();
     const { items, totalItems, totalPages, isLoading } = useAppSelector((state) => state.application);
 
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCompany, setSelectedCompany] = useState('');
-    const [selectedBranch, setSelectedBranch] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [sortConfig, setSortConfig] = useState<{ field: keyof Application; direction: 'asc' | 'desc' } | null>(null);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Read state from URL Params
+    const currentPage = parseInt(searchParams.get('page') || '1');
+    const itemsPerPage = parseInt(searchParams.get('limit') || '10');
+    const searchTerm = searchParams.get('search') || '';
+    const selectedCompany = searchParams.get('company') || '';
+    const selectedBranch = searchParams.get('branch') || '';
+    const selectedStatus = searchParams.get('status') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
+    const sortField = searchParams.get('sortField') as keyof Application | null;
+    const sortOrder = searchParams.get('sortOrder') as 'asc' | 'desc' | null;
+
+    const sortConfig = useMemo(() => {
+        if (!sortField || !sortOrder) return null;
+        return { field: sortField, direction: sortOrder };
+    }, [sortField, sortOrder]);
+
 
     // Debounce search and filter values to reduce API calls
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -49,7 +60,18 @@ export default function ApplicationListPage() {
         dispatch(fetchBranches());
     }, [dispatch]);
 
-    const [itemsPerPage, setItemsPerPage] = useState(10);
+    // Helper to update params
+    const updateParams = (updates: Record<string, string | null>) => {
+        const newParams = new URLSearchParams(searchParams);
+        Object.entries(updates).forEach(([key, value]) => {
+            if (value === null || value === '') {
+                newParams.delete(key);
+            } else {
+                newParams.set(key, value);
+            }
+        });
+        setSearchParams(newParams);
+    };
 
     // Fetch applications with debounced values
     React.useEffect(() => {
@@ -57,30 +79,27 @@ export default function ApplicationListPage() {
             page: currentPage,
             limit: itemsPerPage,
             search: debouncedSearchTerm,
-            sortBy: sortConfig?.field,
-            order: sortConfig?.direction,
+            sortBy: sortField || undefined,
+            order: sortOrder || undefined,
             company: debouncedCompany,
             branch: debouncedBranch,
             status: debouncedStatus,
             dateFrom: debouncedDateFrom,
             dateTo: debouncedDateTo
         }));
-    }, [dispatch, currentPage, itemsPerPage, debouncedSearchTerm, sortConfig, debouncedCompany, debouncedBranch, debouncedStatus, debouncedDateFrom, debouncedDateTo]);
+    }, [dispatch, currentPage, itemsPerPage, debouncedSearchTerm, sortField, sortOrder, debouncedCompany, debouncedBranch, debouncedStatus, debouncedDateFrom, debouncedDateTo]);
 
     const handleSearchChange = (value: string) => {
-        setSearchTerm(value);
-        setCurrentPage(1);
+        updateParams({ search: value, page: '1' });
     };
 
     const handleSort = React.useCallback((field: keyof Application) => {
-        setSortConfig(current => {
-            let direction: 'asc' | 'desc' = 'asc';
-            if (current && current.field === field && current.direction === 'asc') {
-                direction = 'desc';
-            }
-            return { field, direction };
-        });
-    }, []);
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortField === field && sortOrder === 'asc') {
+            direction = 'desc';
+        }
+        updateParams({ sortField: field, sortOrder: direction });
+    }, [sortField, sortOrder, setSearchParams, searchParams]);
 
     const handleDelete = React.useCallback((id: number, title: string) => {
         setDeleteModal({ isOpen: true, appId: id, appTitle: title });
@@ -99,10 +118,10 @@ export default function ApplicationListPage() {
             // Fetch all data matching current filters
             const params = {
                 page: 1,
-                limit: 10000, // Large limit to get all
+                limit: 10000,
                 search: debouncedSearchTerm,
-                sortBy: sortConfig?.field,
-                order: sortConfig?.direction,
+                sortBy: sortField,
+                order: sortOrder,
                 company: debouncedCompany,
                 branch: debouncedBranch,
                 status: debouncedStatus,
@@ -170,32 +189,17 @@ export default function ApplicationListPage() {
                             onExport={handleExport}
                             isExporting={isExporting}
                             selectedCompany={selectedCompany}
-                            onCompanyChange={(value) => {
-                                setSelectedCompany(value);
-                                setCurrentPage(1);
-                            }}
+                            onCompanyChange={(value) => updateParams({ company: value, page: '1' })}
                             companies={companies.map(c => c.name)}
                             branches={branches}
                             selectedBranch={selectedBranch}
-                            onBranchChange={(value) => {
-                                setSelectedBranch(value);
-                                setCurrentPage(1);
-                            }}
+                            onBranchChange={(value) => updateParams({ branch: value, page: '1' })}
                             selectedStatus={selectedStatus}
-                            onStatusChange={(value) => {
-                                setSelectedStatus(value);
-                                setCurrentPage(1);
-                            }}
+                            onStatusChange={(value) => updateParams({ status: value, page: '1' })}
                             dateFrom={dateFrom}
-                            onDateFromChange={(value) => {
-                                setDateFrom(value);
-                                setCurrentPage(1);
-                            }}
+                            onDateFromChange={(value) => updateParams({ dateFrom: value, page: '1' })}
                             dateTo={dateTo}
-                            onDateToChange={(value) => {
-                                setDateTo(value);
-                                setCurrentPage(1);
-                            }}
+                            onDateToChange={(value) => updateParams({ dateTo: value, page: '1' })}
                         />
                     </div>
 
@@ -220,11 +224,8 @@ export default function ApplicationListPage() {
                             totalPages={totalPages}
                             totalItems={totalItems}
                             itemsPerPage={itemsPerPage}
-                            onPageChange={setCurrentPage}
-                            onItemsPerPageChange={(newLimit) => {
-                                setItemsPerPage(newLimit);
-                                setCurrentPage(1);
-                            }}
+                            onPageChange={(page) => updateParams({ page: page.toString() })}
+                            onItemsPerPageChange={(limit) => updateParams({ limit: limit.toString(), page: '1' })}
                         />
                     </div>
                 </div>

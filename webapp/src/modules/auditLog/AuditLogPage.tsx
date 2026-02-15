@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, Search, Filter, RefreshCcw } from 'lucide-react';
 import api from '../../api/axios';
+import { useDebounce } from '../../hooks/useDebounce';
 
 interface AuditLog {
     id: number;
@@ -17,6 +18,7 @@ export default function AuditLogPage() {
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
     const [moduleFilter, setModuleFilter] = useState('');
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
@@ -28,7 +30,7 @@ export default function AuditLogPage() {
                 params: {
                     page,
                     limit: 20,
-                    search: searchTerm,
+                    search: debouncedSearchTerm,
                     module: moduleFilter
                 }
             });
@@ -42,12 +44,15 @@ export default function AuditLogPage() {
     };
 
     useEffect(() => {
+        setPage(1);
+    }, [debouncedSearchTerm, moduleFilter]);
+
+    useEffect(() => {
         fetchLogs();
-    }, [page, searchTerm, moduleFilter]);
+    }, [page, debouncedSearchTerm, moduleFilter]);
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchTerm(e.target.value);
-        setPage(1); // Reset to first page on search
     };
 
     const handleRefresh = () => {

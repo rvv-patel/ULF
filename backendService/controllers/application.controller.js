@@ -1,45 +1,27 @@
-const fs = require('fs');
-const path = require('path');
+const pool = require('../config/database');
 const { logAction } = require('../controllers/auditLog.controller');
+const AppSettingsModel = require('../models/appSettingsModel');
 
-const DB_PATH = path.join(__dirname, '../data/applications.json');
+// Helper to get full application details including queries, documents, and pdfUploads
+const getApplicationDetails = async (id) => {
+    const appResult = await pool.query('SELECT * FROM applications WHERE id = $1', [id]);
+    if (appResult.rows.length === 0) return null;
+    const app = appResult.rows[0];
 
-// Helper to read DB
-const readDb = () => {
-    try {
-        const data = fs.readFileSync(DB_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return { applications: [] };
-    }
-};
+    const queriesResult = await pool.query('SELECT * FROM application_queries WHERE "applicationId" = $1', [id]);
+    app.queries = queriesResult.rows;
 
-// Helper to read Users DB for resolving names
-const readUsersDb = () => {
-    const USERS_PATH = path.join(__dirname, '../data/users.json');
-    try {
-        const data = fs.readFileSync(USERS_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return { users: [] };
-    }
-};
+    const docsResult = await pool.query('SELECT * FROM application_documents WHERE "applicationId" = $1', [id]);
+    app.documents = docsResult.rows;
 
-// Helper to write DB
-const writeDb = (data) => {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-};
+    const pdfsResult = await pool.query('SELECT * FROM application_pdf_uploads WHERE "applicationId" = $1', [id]);
+    app.pdfUploads = pdfsResult.rows;
 
-// Helper: safe string compare
-const includesIgnoreCase = (text, term) => {
-    return (text || '').toString().toLowerCase().includes((term || '').toLowerCase());
+    return app;
 };
 
 exports.getAll = async (req, res) => {
     try {
-        const db = readDb();
-        let items = db.applications;
-
         const {
             page = 1,
             limit = 10,
@@ -53,151 +35,164 @@ exports.getAll = async (req, res) => {
             dateTo = ''
         } = req.query;
 
-        // Filtering
+        let query = 'SELECT * FROM applications WHERE status != \'deleted\'';
+        let countQuery = 'SELECT COUNT(*) FROM applications WHERE status != \'deleted\'';
+        const queryParams = [];
+        let paramCount = 1;
 
-        // Role-based filtering: If not Admin, restrict to assigned companies
+        // Access Control
         if (req.user && req.user.role !== 'Admin') {
             const assignedCompanyIds = req.user.assignedCompanies || [];
-
-            // Use CompanyModel to get company names from PostgreSQL
             let allowedCompanyNames = [];
 
-            try {
-                if (assignedCompanyIds.length > 0) {
-                    const pool = require('../config/database');
-                    const result = await pool.query(
-                        'SELECT id, name FROM companies WHERE id = ANY($1::int[])',
-                        [assignedCompanyIds]
-                    );
-                    allowedCompanyNames = result.rows.map(c => c.name);
-                    console.log(`[Access Control] User ${req.user.email} can access companies:`, allowedCompanyNames);
-                } else {
-                    console.log(`[Access Control] User ${req.user.email} has no assigned companies`);
-                }
-            } catch (err) {
-                console.error('Error fetching companies for access control:', err);
-                // Fallback: if error, allow none for security
-                allowedCompanyNames = [];
+            if (assignedCompanyIds.length > 0) {
+                const result = await pool.query(
+                    'SELECT name FROM companies WHERE id = ANY($1::int[])',
+                    [assignedCompanyIds]
+                );
+                allowedCompanyNames = result.rows.map(c => c.name);
             }
 
-            // Apply filter: application.company must be in allowed list
-            items = items.filter(item => allowedCompanyNames.includes(item.company));
-            console.log(`[Access Control] Filtered to ${items.length} applications for user ${req.user.email}`);
+            if (allowedCompanyNames.length > 0) {
+                query += ` AND company = ANY($${paramCount}::text[])`;
+                countQuery += ` AND company = ANY($${paramCount}::text[])`;
+                queryParams.push(allowedCompanyNames);
+                paramCount++;
+            } else {
+                return res.json({ items: [], total: 0, totalPages: 0, currentPage: parseInt(page) });
+            }
         }
 
+        // Search
         if (search) {
-            items = items.filter(item =>
-                includesIgnoreCase(item.applicantName, search) ||
-                includesIgnoreCase(item.fileNumber, search) ||
-                includesIgnoreCase(item.company, search)
-            );
+            query += ` AND (LOWER("applicantName") LIKE $${paramCount} OR LOWER("fileNumber") LIKE $${paramCount} OR LOWER(company) LIKE $${paramCount})`;
+            countQuery += ` AND (LOWER("applicantName") LIKE $${paramCount} OR LOWER("fileNumber") LIKE $${paramCount} OR LOWER(company) LIKE $${paramCount})`;
+            queryParams.push(`%${search.toLowerCase()}%`);
+            paramCount++;
         }
 
+        // Filters
         if (company) {
-            items = items.filter(item => item.company === company);
+            query += ` AND company = $${paramCount}`;
+            countQuery += ` AND company = $${paramCount}`;
+            queryParams.push(company);
+            paramCount++;
         }
-
         if (branch) {
-            items = items.filter(item => item.branchName === branch);
+            query += ` AND "branchName" = $${paramCount}`;
+            countQuery += ` AND "branchName" = $${paramCount}`;
+            queryParams.push(branch);
+            paramCount++;
         }
-
         if (status) {
-            items = items.filter(item => item.status === status);
-        }
-
-        if (dateFrom || dateTo) {
-            items = items.filter(item => {
-                const itemDate = new Date(item.date);
-                if (dateFrom && itemDate < new Date(dateFrom)) return false;
-                if (dateTo && itemDate > new Date(dateTo)) return false;
-                return true;
-            });
+            query += ` AND status = $${paramCount}`;
+            countQuery += ` AND status = $${paramCount}`;
+            queryParams.push(status);
+            paramCount++;
         }
 
         // Sorting
-        if (sortBy) {
-            items.sort((a, b) => {
-                const valA = a[sortBy];
-                const valB = b[sortBy];
+        const sortMapping = {
+            'id': 'id',
+            'date': 'date',
+            'fileNumber': '"fileNumber"',
+            'applicantName': '"applicantName"',
+            'company': 'company',
+            'status': 'status'
+        };
+        const dbSort = sortMapping[sortBy] || 'id';
+        query += ` ORDER BY ${dbSort} ${order.toUpperCase()}`;
 
-                if (valA === valB) return 0;
+        // Pagination
+        const limitNum = parseInt(limit);
+        const offset = (parseInt(page) - 1) * limitNum;
 
-                // Handle various types if needed, for now assuming string/number equality works
-                const comparison = valA > valB ? 1 : -1;
-                return order === 'desc' ? -comparison : comparison;
+        query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+
+        const totalResult = await pool.query(countQuery, queryParams);
+        const total = parseInt(totalResult.rows[0].count);
+
+        const itemsResult = await pool.query(query, [...queryParams, limitNum, offset]);
+        const items = itemsResult.rows;
+
+        // Fetch queries for these applications to support the "Open Query" indicator in the list
+        if (items.length > 0) {
+            const appIds = items.map(app => app.id);
+            const queriesResult = await pool.query(
+                'SELECT * FROM application_queries WHERE "applicationId" = ANY($1::bigint[])',
+                [appIds]
+            );
+
+            // Map queries to applications
+            const queriesByAppId = queriesResult.rows.reduce((acc, query) => {
+                if (!acc[query.applicationId]) {
+                    acc[query.applicationId] = [];
+                }
+                acc[query.applicationId].push(query);
+                return acc;
+            }, {});
+
+            items.forEach(app => {
+                app.queries = queriesByAppId[app.id] || [];
+            });
+        } else {
+            items.forEach(app => {
+                app.queries = [];
             });
         }
 
-        // Pagination
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const total = items.length;
-        const totalPages = Math.ceil(total / limitNum);
-        const start = (pageNum - 1) * limitNum;
-        const end = start + limitNum;
-
-        const paginatedItems = items.slice(start, end);
-
         res.json({
-            items: paginatedItems,
+            items: items,
             total,
-            totalPages,
-            currentPage: pageNum
+            totalPages: Math.ceil(total / limitNum),
+            currentPage: parseInt(page)
         });
 
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.getById = (req, res) => {
+exports.getById = async (req, res) => {
     try {
-        const db = readDb();
-        const item = db.applications.find(x => x.id === parseInt(req.params.id));
-        if (!item) return res.status(404).json({ message: 'Not found' });
+        const item = await getApplicationDetails(req.params.id);
+        if (!item || item.status === 'deleted') return res.status(404).json({ message: 'Not found' });
         res.json(item);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-const AppSettingsModel = require('../models/appSettingsModel');
-
-// Helper: generate unique file number based on settings
-const generateFileNumber = async (db) => {
-    let fileNumber;
-    let isUnique = false;
-
-    // Read current settings from DB
+// Helper: generate unique file number
+const generateFileNumber = async () => {
     const settings = await AppSettingsModel.getAll();
     let prefix = settings.fileNumberPrefix || 'ULF';
     let sequence = parseInt(settings.fileNumberSequence) || 1000;
     let padding = parseInt(settings.padding) || 4;
 
-    // Safety break to prevent infinite loops
+    let fileNumber;
+    let isUnique = false;
     let attempts = 0;
-    const maxAttempts = 100;
+    const maxAttempts = 20;
 
     while (!isUnique && attempts < maxAttempts) {
         const sequenceStr = String(sequence).padStart(padding, '0');
         fileNumber = `${prefix}-${sequenceStr}`;
 
-        isUnique = !db.applications.some(item => item.fileNumber === fileNumber);
-
-        if (!isUnique) {
-            // Collision found, increment sequence and try again locally for this loop
+        const check = await pool.query('SELECT 1 FROM applications WHERE "fileNumber" = $1', [fileNumber]);
+        if (check.rows.length === 0) {
+            isUnique = true;
+        } else {
             sequence++;
         }
         attempts++;
     }
 
     if (!isUnique) {
-        // Fallback to random if structured generation fails after many attempts
         const randomNum = Math.floor(10000 + Math.random() * 90000);
         fileNumber = `${prefix}-${randomNum}`;
     } else {
-        // Success! Update the sequence in appSettings for the NEXT one
-        // We save sequence + 1 so the next call gets a new number
         await AppSettingsModel.set('fileNumberSequence', sequence + 1);
     }
 
@@ -206,97 +201,119 @@ const generateFileNumber = async (db) => {
 
 exports.create = async (req, res) => {
     try {
-        const db = readDb();
-        const newItem = {
-            id: Date.now(), // simple ID generation
-            ...req.body,
-            fileNumber: await generateFileNumber(db) // Override/Set fileNumber
-        };
-        db.applications.push(newItem);
-        writeDb(db);
+        let fileNumber = req.body.fileNumber;
+        if (!fileNumber) {
+            fileNumber = await generateFileNumber();
+        }
 
-        // Attempt to create OneDrive folder (non-blocking if it fails)
+        const {
+            date, company, companyReference, applicantName, proposedOwner,
+            currentOwner, branchName, propertyAddress, city, sendToMail
+        } = req.body;
+
+        const result = await pool.query(`
+            INSERT INTO applications (
+                "fileNumber", "date", company, "companyReference", "applicantName",
+                "proposedOwner", "currentOwner", "branchName", "propertyAddress", city,
+                status, "sendToMail"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id, "createdAt"
+        `, [
+            fileNumber, date, company, companyReference, applicantName,
+            proposedOwner, currentOwner, branchName, propertyAddress, city,
+            'Login', sendToMail || false
+        ]);
+
+        const newId = result.rows[0].id; // Auto-incremented ID from returning
+
+        const newItem = {
+            id: newId,
+            fileNumber,
+            date, company, companyReference, applicantName, proposedOwner,
+            currentOwner, branchName, propertyAddress, city,
+            status: 'Login',
+            sendToMail: sendToMail || false,
+            createdAt: result.rows[0].createdAt
+        };
+
+        // Attempt to create OneDrive folder
         try {
             const onedriveService = require('../services/onedriveService');
-
-            // Only attempt if OneDrive is authenticated
             if (onedriveService.isAuthenticated()) {
-                const result = await onedriveService.createApplicationFolder(
-                    newItem.fileNumber,
-                    newItem.applicantName || 'Unknown Applicant',
-                    newItem.company || ''
+                const odResult = await onedriveService.createApplicationFolder(
+                    fileNumber,
+                    applicantName || 'Unknown Applicant',
+                    company || ''
                 );
 
-                // Store OneDrive folder info in application
-                newItem.onedriveFolderId = result.folderId;
-                newItem.onedriveFolderUrl = result.webUrl;
+                await pool.query(`
+                    UPDATE applications 
+                    SET "onedriveFolderId" = $1, "onedriveFolderUrl" = $2
+                    WHERE id = $3
+                `, [odResult.folderId, odResult.webUrl, newId]);
 
-                // Update DB with OneDrive info
-                const updatedDb = readDb();
-                const index = updatedDb.applications.findIndex(x => x.id === newItem.id);
-                if (index !== -1) {
-                    updatedDb.applications[index] = newItem;
-                    writeDb(updatedDb);
-                }
-
-                console.log(`OneDrive folder created for ${newItem.fileNumber}`);
-            } else {
-                console.log('OneDrive not authenticated, skipping folder creation');
+                newItem.onedriveFolderId = odResult.folderId;
+                newItem.onedriveFolderUrl = odResult.webUrl;
             }
         } catch (onedriveError) {
-            // Log but don't fail the request if OneDrive fails
             console.error('OneDrive folder creation failed:', onedriveError.message);
         }
 
         res.status(201).json(newItem);
 
-        // Audit Log
         if (req.user) {
-            logAction(req.user.userId, req.user.email, 'Create', 'Applications', `Created application ${newItem.fileNumber}`, req);
+            logAction(req.user.userId, req.user.email, 'Create', 'Applications', `Created application ${fileNumber}`, req);
         }
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.update = (req, res) => {
+exports.update = async (req, res) => {
     try {
-        const db = readDb();
-        const index = db.applications.findIndex(x => x.id === parseInt(req.params.id));
-        if (index === -1) return res.status(404).json({ message: 'Not found' });
-
-        // Prevent updating fileNumber if passed (or preserve existing)
+        const id = parseInt(req.params.id);
         const { fileNumber, ...updateData } = req.body;
 
-        db.applications[index] = { ...db.applications[index], ...updateData };
-        writeDb(db);
+        const allowedFields = [
+            "date", "company", "companyReference", "applicantName",
+            "proposedOwner", "currentOwner", "branchName", "propertyAddress",
+            "city", "status", "sendToMail"
+        ];
 
-        // Audit Log
-        if (req.user) {
-            logAction(req.user.userId, req.user.email, 'Update', 'Applications', `Updated application ${db.applications[index].fileNumber}`, req);
+        const keys = Object.keys(updateData).filter(k => allowedFields.includes(k));
+        if (keys.length > 0) {
+            const setClause = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
+            const values = keys.map(k => updateData[k]);
+
+            await pool.query(`
+                UPDATE applications SET ${setClause}, "updatedAt" = NOW() WHERE id = $${keys.length + 1}
+            `, [...values, id]);
         }
 
-        res.json(db.applications[index]);
+        const updatedItem = await getApplicationDetails(id);
+        res.json(updatedItem);
+
+        if (req.user && updatedItem) {
+            logAction(req.user.userId, req.user.email, 'Update', 'Applications', `Updated application ${updatedItem.fileNumber}`, req);
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.delete = (req, res) => {
+exports.delete = async (req, res) => {
     try {
-        const db = readDb();
-        const initialLength = db.applications.length;
-        db.applications = db.applications.filter(x => x.id !== parseInt(req.params.id));
+        const id = parseInt(req.params.id);
+        // Soft delete logic remains same
+        const result = await pool.query('UPDATE applications SET status = \'deleted\' WHERE id = $1 RETURNING "fileNumber"', [id]);
 
-        if (db.applications.length === initialLength) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Not found' });
         }
 
-        writeDb(db);
-
-        // Audit Log
         if (req.user) {
-            logAction(req.user.userId, req.user.email, 'Delete', 'Applications', `Deleted application ID ${req.params.id}`, req);
+            logAction(req.user.userId, req.user.email, 'Delete', 'Applications', `Soft deleted application ID ${id}`, req);
         }
 
         res.json({ message: 'Deleted successfully' });
@@ -305,89 +322,95 @@ exports.delete = (req, res) => {
     }
 };
 
-exports.bulkDelete = (req, res) => {
+exports.bulkDelete = async (req, res) => {
     try {
-        const { ids } = req.body; // Expects { ids: [1, 2, 3] }
+        const { ids } = req.body;
         if (!Array.isArray(ids)) return res.status(400).json({ message: 'Invalid ids format' });
 
-        const db = readDb();
-        db.applications = db.applications.filter(x => !ids.includes(x.id));
-        writeDb(db);
+        await pool.query('UPDATE applications SET status = \'deleted\' WHERE id = ANY($1::bigint[])', [ids]);
+
         res.json({ message: 'Bulk deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.addQuery = (req, res) => {
+exports.addQuery = async (req, res) => {
     try {
-        const db = readDb();
-        const usersDb = readUsersDb();
-        const applicationIndex = db.applications.findIndex(x => x.id === parseInt(req.params.id));
-        if (applicationIndex === -1) return res.status(404).json({ message: 'Application not found' });
+        const appId = parseInt(req.params.id);
 
-        const currentUser = usersDb.users.find(u => u.id === req.user.userId) || { firstName: 'Unknown', lastName: '' };
+        const userResult = await pool.query('SELECT "firstName", "lastName" FROM users WHERE id = $1', [req.user.userId]);
+        const currentUser = userResult.rows[0] || { firstName: 'Unknown', lastName: '' };
         const raisedByName = `${currentUser.firstName} ${currentUser.lastName}`.trim();
 
-        const newQuery = {
-            id: Date.now(),
-            date: req.body.date,
-            queryDetails: req.body.queryDetails,
-            remarks: req.body.remarks,
-            raisedBy: raisedByName,
-            isResolved: false,
-            resolvedBy: null,
-            resolvedDate: null
-        };
+        // Let DB handle ID generation
+        const insertQuery = `
+            INSERT INTO application_queries (
+                "applicationId", "date", "queryDetails", remarks, "raisedBy", "isResolved"
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+        `;
 
-        if (!db.applications[applicationIndex].queries) {
-            db.applications[applicationIndex].queries = [];
-        }
+        await pool.query(insertQuery, [appId, req.body.date, req.body.queryDetails, req.body.remarks, raisedByName, false]);
 
-        db.applications[applicationIndex].queries.push(newQuery);
-        writeDb(db);
-        res.status(201).json(db.applications[applicationIndex]);
+        const updatedApp = await getApplicationDetails(appId);
+        res.status(201).json(updatedApp);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-exports.updateQuery = (req, res) => {
+exports.updateQuery = async (req, res) => {
     try {
-        const db = readDb();
-        const usersDb = readUsersDb();
-        const applicationIndex = db.applications.findIndex(x => x.id === parseInt(req.params.id));
-        if (applicationIndex === -1) return res.status(404).json({ message: 'Application not found' });
+        const appId = parseInt(req.params.id);
+        const queryId = parseInt(req.params.queryId);
+        // Update logic remains same, operating on existing ID
 
-        const application = db.applications[applicationIndex];
-        if (!application.queries) return res.status(404).json({ message: 'Query not found' });
+        let setClause = [];
+        let values = [];
+        let paramCount = 1;
 
-        const queryIndex = application.queries.findIndex(q => q.id === parseInt(req.params.queryId));
-        if (queryIndex === -1) return res.status(404).json({ message: 'Query not found' });
+        if (req.body.queryDetails !== undefined) {
+            setClause.push(`"queryDetails" = $${paramCount++}`);
+            values.push(req.body.queryDetails);
+        }
+        if (req.body.remarks !== undefined) {
+            setClause.push(`remarks = $${paramCount++}`);
+            values.push(req.body.remarks);
+        }
+        if (req.body.date !== undefined) {
+            setClause.push(`"date" = $${paramCount++}`);
+            values.push(req.body.date);
+        }
 
-        const query = application.queries[queryIndex];
-
-        // Update fields if provided
-        if (req.body.queryDetails !== undefined) query.queryDetails = req.body.queryDetails;
-        if (req.body.remarks !== undefined) query.remarks = req.body.remarks;
-        if (req.body.date !== undefined) query.date = req.body.date;
-
-        // Handle Resolution
         if (req.body.isResolved !== undefined) {
-            query.isResolved = req.body.isResolved;
-            if (query.isResolved) {
-                const currentUser = usersDb.users.find(u => u.id === req.user.userId) || { firstName: 'Unknown', lastName: '' };
-                query.resolvedBy = `${currentUser.firstName} ${currentUser.lastName}`.trim();
-                query.resolvedDate = new Date().toISOString().split('T')[0];
+            setClause.push(`"isResolved" = $${paramCount++}`);
+            values.push(req.body.isResolved);
+
+            if (req.body.isResolved) {
+                const userResult = await pool.query('SELECT "firstName", "lastName" FROM users WHERE id = $1', [req.user.userId]);
+                const currentUser = userResult.rows[0] || { firstName: 'Unknown', lastName: '' };
+                const resolvedBy = `${currentUser.firstName} ${currentUser.lastName}`.trim();
+
+                setClause.push(`"resolvedBy" = $${paramCount++}`);
+                values.push(resolvedBy);
+                setClause.push(`"resolvedDate" = $${paramCount++}`);
+                values.push(new Date().toISOString().split('T')[0]);
             } else {
-                query.resolvedBy = null;
-                query.resolvedDate = null;
+                setClause.push(`"resolvedBy" = $${paramCount++}`);
+                values.push(null);
+                setClause.push(`"resolvedDate" = $${paramCount++}`);
+                values.push(null);
             }
         }
 
-        db.applications[applicationIndex].queries[queryIndex] = query;
-        writeDb(db);
-        res.json(db.applications[applicationIndex]);
+        if (setClause.length === 0) return res.json({ message: 'No changes' });
+
+        const query = `UPDATE application_queries SET ${setClause.join(', ')} WHERE id = $${paramCount} AND "applicationId" = $${paramCount + 1}`;
+        await pool.query(query, [...values, queryId, appId]);
+
+        const updatedApp = await getApplicationDetails(appId);
+        res.json(updatedApp);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, ArrowUpDown, ArrowUp, ArrowDown, LogOut, Eye } from 'lucide-react';
+import { Trash2, ArrowUpDown, ArrowUp, ArrowDown, LogOut } from 'lucide-react';
 import type { User } from '../types';
 import type { Branch } from '../../../modules/masters/branch/types';
 import type { Company } from '../../../store/slices/companySlice';
@@ -16,6 +16,7 @@ interface UserTableProps {
     onEdit: (id: number) => void;
     onAssignCompany: (user: User) => void;
     onForceLogout: (user: User) => void;
+    onSetPassword: (user: User) => void;
 }
 
 export const UserTable: React.FC<UserTableProps> = ({
@@ -28,7 +29,8 @@ export const UserTable: React.FC<UserTableProps> = ({
     onDelete,
     onEdit,
     onAssignCompany,
-    onForceLogout
+    onForceLogout,
+    onSetPassword
 }) => {
     const { hasPermission, user: currentUser } = useAuth();
     if (isLoading) {
@@ -90,7 +92,7 @@ export const UserTable: React.FC<UserTableProps> = ({
                             className="hover:bg-gray-50/80 transition-colors group"
                         >
                             <td className="p-4 cursor-pointer" onClick={() => onEdit(user.id)}>
-                                <div className="font-medium text-gray-900 group-hover:text-green-600 transition-colors">
+                                <div className="font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors">
                                     {user.firstName} {user.lastName}
                                 </div>
                             </td>
@@ -126,15 +128,19 @@ export const UserTable: React.FC<UserTableProps> = ({
                             </td>
                             <td className="p-4 text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                    {hasPermission('edit_users') && (
+                                    {/* Set Password - Only for Admin */}
+                                    {currentUser?.role === 'Admin' && (
                                         <button
-                                            onClick={() => onEdit(user.id)}
+                                            onClick={() => onSetPassword(user)}
                                             className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-blue-600 transition-colors"
-                                            title="Edit"
+                                            title="Set Password"
                                         >
-                                            <Eye className="h-4 w-4" />
+                                            <div className="flex items-center justify-center p-0.5 border-2 border-current rounded-full w-5 h-5">
+                                                <div className="w-1 h-2 bg-current rounded-t-sm" />
+                                            </div>
                                         </button>
                                     )}
+
                                     {/* Force Logout - Only for Admin and only for active users */}
                                     {currentUser?.role === 'Admin' && user.status === 'active' && currentUser.id !== user.id && (
                                         <button

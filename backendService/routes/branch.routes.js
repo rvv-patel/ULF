@@ -7,8 +7,8 @@ const { authenticateToken, authorizePermission } = require('../middleware/auth.m
 
 router.use(authenticateToken);
 
-router.get('/', authorizePermission('view_branches'), branchController.getAllBranches);
-router.get('/:id', authorizePermission('view_branches'), branchController.getBranchById);
+router.get('/', authorizePermission(['view_branches', 'view_applications', 'add_applications', 'edit_applications']), branchController.getAllBranches);
+router.get('/:id', authorizePermission(['view_branches', 'view_applications', 'add_applications', 'edit_applications']), branchController.getBranchById);
 router.post('/', authorizePermission('add_branches'), upload.single('image'), branchController.createBranch);
 router.put('/:id', authorizePermission('edit_branches'), upload.single('image'), branchController.updateBranch);
 router.delete('/:id', authorizePermission('delete_branches'), branchController.deleteBranch);

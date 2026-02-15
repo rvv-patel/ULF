@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { addApplication, updateApplication } from '../../store/slices/applicationSlice';
+import { addApplication, updateApplication, fetchApplicationById, clearCurrentApplication } from '../../store/slices/applicationSlice';
 import type { Application, ApplicationStatus } from './types';
 
 import { fetchCompanies } from '../../store/slices/companySlice';
@@ -16,18 +16,37 @@ export default function ApplicationFormPage() {
 
     const { items: companies } = useAppSelector((state) => state.company);
     const { items: branches } = useAppSelector((state) => state.branch);
+    const { items: applications, currentApplication, isLoading } = useAppSelector((state) => state.application);
 
-    React.useEffect(() => {
+    // 1. Try to find in list, otherwise use currentApplication
+    // Use loose equality (==) to handle string/number ID mismatch
+    const existingItem = isEditMode
+        ? applications.find(i => String(i.id) === String(id)) || (currentApplication && String(currentApplication.id) === String(id) ? currentApplication : null)
+        : null;
+
+    useEffect(() => {
+        // console.log('ApplicationFormPage Debug:', { id, isEditMode, existingItem, currentAppId: currentApplication?.id, appsCount: applications.length });
+
         dispatch(fetchCompanies());
         dispatch(fetchBranches());
-    }, [dispatch]);
 
-    // In a real app we would fetch the item if isEditMode is true
-    const existingItem = useAppSelector(state => state.application.items.find(i => i.id === Number(id)));
+        // 2. Fetch application if edit mode and not found
+        if (isEditMode && !existingItem) {
+            // console.log('Fetching application by ID', id);
+            dispatch(fetchApplicationById(Number(id)));
+        }
+    }, [dispatch, isEditMode, id, existingItem]); // Dependencies kept, but we separated cleanup
+
+    // Cleanup effect - ONLY runs on unmount
+    useEffect(() => {
+        return () => {
+            dispatch(clearCurrentApplication());
+        };
+    }, [dispatch]);
 
     const [formData, setFormData] = useState<Partial<Application>>({
         fileNumber: '',
-        date: new Date().toLocaleDateString('en-US'), // Format: MM/DD/YYYY to match input type="date" approx
+        date: new Date().toISOString().split('T')[0],
         company: '',
         companyReference: '',
         applicantName: '',
@@ -35,16 +54,31 @@ export default function ApplicationFormPage() {
         currentOwner: '',
         branchName: '',
         propertyAddress: '',
-        city: 'Ahmedabad', // Default
-        status: 'Blocked',
+        city: 'Ahmedabad',
+        status: 'Login',
         sendToMail: false
     });
 
-    React.useEffect(() => {
+    // 3. Populate form when item is available
+    useEffect(() => {
         if (existingItem) {
+            // console.log('Populating form with existingItem:', existingItem);
+
+            // Handle date robustly: check if it's ISO (YYYY-MM-DD...) or DD-MM-YYYY
+            let dateVal = '';
+            if (existingItem.date) {
+                if (existingItem.date.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    // It is YYYY-MM-DD (ISO or simple), use as is (take first part if time exists)
+                    dateVal = existingItem.date.split('T')[0];
+                } else {
+                    // Assume DD-MM-YYYY, convert to YYYY-MM-DD
+                    dateVal = fromApiDate(existingItem.date);
+                }
+            }
+
             setFormData({
                 fileNumber: existingItem.fileNumber,
-                date: fromApiDate(existingItem.date), // Convert DD-MM-YYYY to YYYY-MM-DD
+                date: dateVal,
                 company: existingItem.company,
                 companyReference: existingItem.companyReference,
                 applicantName: existingItem.applicantName,
@@ -62,8 +96,8 @@ export default function ApplicationFormPage() {
     const handleSubmit = async (shouldEmail: boolean = false) => {
         const payload: Application = {
             id: isEditMode ? Number(id) : Date.now(),
-            fileNumber: formData.fileNumber || '', // Backend handles generation if empty/new
-            date: toApiDate(formData.date || ''), // Convert YYYY-MM-DD to DD-MM-YYYY
+            fileNumber: formData.fileNumber || '',
+            date: toApiDate(formData.date || ''),
             company: formData.company || '',
             companyReference: formData.companyReference || '',
             applicantName: formData.applicantName || '',
@@ -72,9 +106,9 @@ export default function ApplicationFormPage() {
             branchName: formData.branchName || '',
             propertyAddress: formData.propertyAddress || '',
             city: formData.city || 'Ahmedabad',
-            status: (formData.status as ApplicationStatus) || 'Blocked',
+            status: (formData.status as ApplicationStatus) || 'Login',
             sendToMail: shouldEmail,
-            file: null // File upload removed from UI as per image, keeping null
+            file: null
         } as Application;
 
         try {
@@ -83,137 +117,187 @@ export default function ApplicationFormPage() {
             } else {
                 await dispatch(addApplication(payload)).unwrap();
             }
-            navigate('/application');
+            navigate(-1);
         } catch (err) {
             console.error('Failed to save:', err);
         }
     };
 
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name, value, type } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+        }));
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50/50 p-6 flex items-center justify-center">
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 w-full max-w-4xl p-8">
-                <div className="mb-6">
-                    <h1 className="text-xl font-bold text-gray-900">{isEditMode ? 'Edit Application' : 'New Application'}</h1>
-                </div>
-
-                <div className="space-y-6">
-                    {/* Row 1 */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">New Application Date <span className="text-red-500">*</span></label>
-                            <input
-                                type="date"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={formData.date}
-                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Company Name <span className="text-red-500">*</span></label>
-                            <select
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                value={formData.company}
-                                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                            >
-                                <option value="">Select Company</option>
-                                {companies.map((company) => (
-                                    <option key={company.id} value={company.name}>{company.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Company Reference</label>
-                            <input
-                                type="text"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={formData.companyReference}
-                                onChange={(e) => setFormData({ ...formData, companyReference: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Row 2 */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Applicant Name <span className="text-red-500">*</span></label>
-                            <input
-                                type="text"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={formData.applicantName}
-                                onChange={(e) => setFormData({ ...formData, applicantName: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Proposed Owner <span className="text-red-500">*</span></label>
-                            <input
-                                type="text"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={formData.proposedOwner}
-                                onChange={(e) => setFormData({ ...formData, proposedOwner: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Current Owner <span className="text-red-500">*</span></label>
-                            <input
-                                type="text"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={formData.currentOwner}
-                                onChange={(e) => setFormData({ ...formData, currentOwner: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Row 3 */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name <span className="text-red-500">*</span></label>
-                            <select
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                value={formData.branchName}
-                                onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
-                            >
-                                <option value="">Select Branch</option>
-                                {branches.map((branch) => (
-                                    <option key={branch.id} value={branch.name}>{branch.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Property Address <span className="text-red-500">*</span></label>
-                        <textarea
-                            rows={6}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                            value={formData.propertyAddress}
-                            onChange={(e) => setFormData({ ...formData, propertyAddress: e.target.value })}
-                        />
-                    </div>
-
-                    {/* Buttons */}
-                    <div className="flex items-center justify-end gap-3 pt-4">
+        <div className="min-h-screen bg-slate-50/50 p-4">
+            <div className="max-w-3xl mx-auto">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 bg-white flex justify-between items-center">
+                        <h1 className="text-xl font-bold text-slate-800">
+                            {isEditMode ? 'Edit Application' : 'New Application'}
+                        </h1>
                         <button
                             type="button"
-                            onClick={() => navigate('/application')}
-                            className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+                            onClick={() => navigate(-1)}
+                            className="text-slate-500 hover:text-slate-700"
                         >
                             Cancel
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => handleSubmit(false)}
-                            className="px-6 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition shadow-sm"
-                        >
-                            Confirm
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleSubmit(true)}
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm"
-                        >
-                            Confirm & Email
-                        </button>
+                    </div>
+
+                    <div className="p-6">
+                        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(formData.sendToMail); }} className="space-y-6">
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+
+                                {/* Date */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                                    <input
+                                        type="date"
+                                        name="date"
+                                        value={formData.date || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Branch */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+                                    <select
+                                        name="branchName"
+                                        value={formData.branchName || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    >
+                                        <option value="">Select Branch</option>
+                                        {branches.map((b) => (
+                                            <option key={b.id} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Company */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Company</label>
+                                    <select
+                                        name="company"
+                                        value={formData.company || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    >
+                                        <option value="">Select Company</option>
+                                        {companies.map((c) => (
+                                            <option key={c.id} value={c.name}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Company Reference */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Company Reference</label>
+                                    <input
+                                        type="text"
+                                        name="companyReference"
+                                        value={formData.companyReference || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                {/* Applicant Name */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Applicant Name</label>
+                                    <input
+                                        type="text"
+                                        name="applicantName"
+                                        value={formData.applicantName || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Current Owner */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Current Owner</label>
+                                    <input
+                                        type="text"
+                                        name="currentOwner"
+                                        value={formData.currentOwner || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                {/* Proposed Owner */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Proposed Owner</label>
+                                    <input
+                                        type="text"
+                                        name="proposedOwner"
+                                        value={formData.proposedOwner || ''}
+                                        onChange={handleChange}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+
+
+                                {/* Property Address */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Property Address</label>
+                                    <textarea
+                                        name="propertyAddress"
+                                        value={formData.propertyAddress || ''}
+                                        onChange={handleChange}
+                                        rows={3}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+
+
+                                {/* Send To Mail */}
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        name="sendToMail"
+                                        id="sendToMail"
+                                        checked={formData.sendToMail || false}
+                                        onChange={handleChange}
+                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <label htmlFor="sendToMail" className="ml-2 block text-sm text-slate-700">
+                                        Send Notification Mail
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(-1)}
+                                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                                >
+                                    {isEditMode ? 'Update Application' : 'Create Application'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>

@@ -100,7 +100,7 @@ export default function ApplicationViewPage() {
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
                 <p className="text-red-600 mb-4">{error}</p>
                 <button
-                    onClick={() => navigate('/application')}
+                    onClick={() => navigate(-1)}
                     className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
                 >
                     <ArrowLeft size={20} />
@@ -129,7 +129,7 @@ export default function ApplicationViewPage() {
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => navigate('/application')}
+                                onClick={() => navigate(-1)}
                                 className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
                             >
                                 <ArrowLeft size={20} />
